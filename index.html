@@ -1,0 +1,1100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Levino Flash - AI Code Editor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #0b0d10;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            padding: 12px 20px;
+            background: #1a1e24;
+            border-bottom: 1px solid #2a323c;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+
+        .header h1 {
+            color: #e8edf2;
+            font-size: 18px;
+            font-weight: 500;
+        }
+
+        .header .status {
+            color: #6a7a8a;
+            font-size: 13px;
+        }
+
+        .main {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .file-panel {
+            width: 200px;
+            background: #14181e;
+            border-right: 1px solid #2a323c;
+            padding: 12px;
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+
+        .file-panel .panel-title {
+            color: #6a7a8a;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .file-panel .panel-title .add-btn {
+            cursor: pointer;
+            color: #2b6ef0;
+            font-size: 15px;
+            line-height: 1;
+        }
+
+        .file-panel .file-item {
+            padding: 8px 10px;
+            border-radius: 6px;
+            color: #a0b0c0;
+            font-size: 13px;
+            cursor: pointer;
+            transition: 0.15s;
+            font-family: 'Consolas', monospace;
+            user-select: none;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .file-panel .file-item .fname {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .file-panel .file-item .del-x {
+            color: #4a5a6a;
+            font-size: 12px;
+            flex-shrink: 0;
+        }
+
+        .file-panel .file-item .del-x:hover {
+            color: #ff4757;
+        }
+
+        .file-panel .file-item:hover {
+            background: #1f2833;
+        }
+
+        .file-panel .file-item.active {
+            background: #2b6ef0;
+            color: white;
+        }
+
+        .file-panel .file-item.active .del-x {
+            color: #cfe0fb;
+        }
+
+        .code-panel {
+            flex: 1;
+            background: #0d1117;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .code-panel .code-header {
+            padding: 8px 16px;
+            background: #161b22;
+            border-bottom: 1px solid #2a323c;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .code-panel .code-header .file-name {
+            color: #e8edf2;
+            font-size: 13px;
+            font-family: 'Consolas', monospace;
+        }
+
+        .code-panel .code-header .save-hint {
+            color: #4a5a6a;
+            font-size: 11px;
+        }
+
+        .code-panel textarea {
+            flex: 1;
+            background: #0d1117;
+            color: #e6edf3;
+            border: none;
+            padding: 16px;
+            font-family: 'Consolas', 'Fira Code', monospace;
+            font-size: 14px;
+            line-height: 1.8;
+            outline: none;
+            resize: none;
+            tab-size: 4;
+        }
+
+        .code-panel textarea:disabled {
+            color: #3a4550;
+        }
+
+        .code-panel textarea::placeholder {
+            color: #3a4550;
+        }
+
+        .chat-panel {
+            width: 340px;
+            background: #14181e;
+            border-left: 1px solid #2a323c;
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+        }
+
+        .chat-panel .chat-header {
+            padding: 12px 16px;
+            border-bottom: 1px solid #2a323c;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .chat-panel .chat-header .title {
+            color: #e8edf2;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .chat-panel .chat-header .actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .chat-panel .chat-header .model-badge {
+            font-size: 11px;
+            color: #6a7a8a;
+            background: #1f2833;
+            padding: 2px 10px;
+            border-radius: 12px;
+        }
+
+        .chat-panel .chat-header .clear-btn {
+            background: transparent;
+            border: 1px solid #3a4550;
+            color: #6a7a8a;
+            padding: 2px 10px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 11px;
+            transition: 0.15s;
+        }
+
+        .chat-panel .chat-header .clear-btn:hover {
+            border-color: #ff4757;
+            color: #ff4757;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 12px 16px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .chat-msg {
+            padding: 8px 12px;
+            border-radius: 12px;
+            font-size: 13px;
+            line-height: 1.5;
+            word-break: break-word;
+            max-width: 95%;
+            white-space: pre-wrap;
+        }
+
+        .chat-msg.user {
+            align-self: flex-end;
+            background: #2b6ef0;
+            color: white;
+        }
+
+        .chat-msg.ai {
+            align-self: flex-start;
+            background: #1f2833;
+            color: #e4e9f0;
+        }
+
+        .chat-msg.system {
+            align-self: center;
+            background: transparent;
+            color: #4a5a6a;
+            font-size: 12px;
+            text-align: center;
+        }
+
+        .chat-msg .action-box {
+            background: #0d1117;
+            border: 1px solid #2a323c;
+            border-radius: 6px;
+            padding: 8px 12px;
+            margin-top: 6px;
+            font-family: 'Consolas', monospace;
+            font-size: 12px;
+        }
+
+        .chat-msg .action-box .action-title {
+            color: #f1fa8c;
+            font-weight: bold;
+        }
+
+        .chat-msg .action-box .action-title.action-error {
+            color: #ff4757;
+        }
+
+        .chat-msg .action-box .action-detail {
+            color: #8be9fd;
+            margin-top: 4px;
+            display: block;
+        }
+
+        .chat-msg .command-badge {
+            display: inline-block;
+            background: #2a323c;
+            color: #f0883e;
+            padding: 1px 8px;
+            border-radius: 10px;
+            font-size: 10px;
+            font-family: 'Consolas', monospace;
+            margin-bottom: 4px;
+        }
+
+        .chat-input-area {
+            padding: 10px 16px;
+            border-top: 1px solid #2a323c;
+            display: flex;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        .chat-input-area input {
+            flex: 1;
+            padding: 8px 14px;
+            border-radius: 20px;
+            border: 1px solid #2a323c;
+            background: #0d1117;
+            color: #e8edf2;
+            font-size: 13px;
+            outline: none;
+        }
+
+        .chat-input-area input:focus {
+            border-color: #2b6ef0;
+        }
+
+        .chat-input-area input::placeholder {
+            color: #4a5a6a;
+        }
+
+        .chat-input-area button {
+            background: #2b6ef0;
+            border: none;
+            color: white;
+            padding: 6px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: 0.15s;
+            min-width: 80px;
+        }
+
+        .chat-input-area button:hover:not(:disabled) {
+            background: #3a7df5;
+        }
+
+        .chat-input-area button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .empty-files {
+            color: #3a4550;
+            text-align: center;
+            font-size: 13px;
+            padding: 30px 10px;
+        }
+
+        .empty-chat {
+            color: #3a4550;
+            text-align: center;
+            font-size: 13px;
+            padding: 30px 10px;
+        }
+
+        .file-panel::-webkit-scrollbar,
+        .chat-messages::-webkit-scrollbar,
+        .code-panel textarea::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .file-panel::-webkit-scrollbar-track,
+        .chat-messages::-webkit-scrollbar-track,
+        .code-panel textarea::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .file-panel::-webkit-scrollbar-thumb,
+        .chat-messages::-webkit-scrollbar-thumb,
+        .code-panel textarea::-webkit-scrollbar-thumb {
+            background: #2a323c;
+            border-radius: 4px;
+        }
+
+        @media (max-width: 768px) {
+            .file-panel { width: 160px; }
+            .chat-panel { width: 240px; }
+        }
+
+        @media (max-width: 600px) {
+            .main { flex-direction: column; }
+            .file-panel { width: 100%; height: 100px; border-right: none; border-bottom: 1px solid #2a323c; }
+            .chat-panel { width: 100%; height: 200px; border-left: none; border-top: 1px solid #2a323c; }
+            .code-panel { flex: 1; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>Levino Flash</h1>
+    <span class="status">● AI Code Editor</span>
+</div>
+
+<div class="main">
+    <div class="file-panel" id="filePanel">
+        <div class="panel-title">
+            <span>Files</span>
+            <span class="add-btn" id="addFileBtn" title="New file">+</span>
+        </div>
+        <div id="fileList">
+            <div class="empty-files">No files yet</div>
+        </div>
+    </div>
+
+    <div class="code-panel">
+        <div class="code-header">
+            <span class="file-name" id="currentFileName">No file selected</span>
+            <span class="save-hint" id="saveHint"></span>
+        </div>
+        <textarea id="codeEditor" placeholder="Select a file to start editing..." spellcheck="false" disabled></textarea>
+    </div>
+
+    <div class="chat-panel">
+        <div class="chat-header">
+            <span class="title">AI Assistant</span>
+            <div class="actions">
+                <span class="model-badge">GPT-OSS 120B</span>
+                <button class="clear-btn" id="clearChatBtn">✕ Clear</button>
+            </div>
+        </div>
+        <div class="chat-messages" id="chatMessages">
+            <div class="empty-chat">Ask me to create, edit, or delete files</div>
+        </div>
+        <div class="chat-input-area">
+            <input type="text" id="chatInput" placeholder="Type a message..." />
+            <button id="chatSendBtn">Send</button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    'use strict';
+
+    // ============================================================
+    // CONFIG
+    // ============================================================
+    // Личный ключ пользователя — зашит по явной просьбе, для
+    // локального personal-use файла. Если этот файл когда-нибудь
+    // окажется на публичном хостинге или в репозитории — ключ
+    // будет виден всем, кто откроет "просмотр кода страницы".
+    const API_KEY = 'csk-hp4npdrd94y6v4v8c494mnx4vd6wh9hcmn8tpjr8xwrp64d6';
+    const API_URL = 'https://api.cerebras.ai/v1/chat/completions';
+    const MODEL = 'gpt-oss-120b';
+    const COOLDOWN_SECONDS = 5;
+    const MAX_HISTORY_MESSAGES = 10;
+
+    // ============================================================
+    // STATE
+    // ============================================================
+    let files = {};          // { filename: content }
+    let currentFile = null;
+    let chatHistory = [];    // [{ role, content, actions? }]
+    let isProcessing = false;
+    let isCooldown = false;
+    let dirty = false;       // unsaved edits in the textarea
+
+    // ============================================================
+    // DOM
+    // ============================================================
+    const fileList = document.getElementById('fileList');
+    const codeEditor = document.getElementById('codeEditor');
+    const currentFileName = document.getElementById('currentFileName');
+    const saveHint = document.getElementById('saveHint');
+    const chatMessages = document.getElementById('chatMessages');
+    const chatInput = document.getElementById('chatInput');
+    const chatSendBtn = document.getElementById('chatSendBtn');
+    const clearChatBtn = document.getElementById('clearChatBtn');
+    const addFileBtn = document.getElementById('addFileBtn');
+
+    // ============================================================
+    // PERSISTENCE
+    // ============================================================
+    function loadFiles() {
+        try {
+            const saved = localStorage.getItem('levino_files');
+            if (saved) {
+                files = JSON.parse(saved);
+                return true;
+            }
+        } catch (e) {
+            console.error('Failed to load files:', e);
+        }
+        return false;
+    }
+
+    function saveFiles() {
+        try {
+            localStorage.setItem('levino_files', JSON.stringify(files));
+        } catch (e) {
+            console.error('Failed to save files:', e);
+            addSystemMessage('Не удалось сохранить файлы в localStorage (возможно, хранилище переполнено).');
+        }
+    }
+
+    function loadChat() {
+        try {
+            const saved = localStorage.getItem('levino_chat');
+            if (saved) {
+                chatHistory = JSON.parse(saved);
+                return true;
+            }
+        } catch (e) {
+            console.error('Failed to load chat:', e);
+        }
+        return false;
+    }
+
+    function saveChat() {
+        try {
+            localStorage.setItem('levino_chat', JSON.stringify(chatHistory));
+        } catch (e) {
+            console.error('Failed to save chat:', e);
+        }
+    }
+
+    // ============================================================
+    // FILENAME HELPERS
+    // Normalizing names is the fix for "AI can't find the file":
+    // the model may wrap names in quotes/backticks/markdown bold,
+    // add a leading "./", or vary case. We resolve all of those
+    // to the real stored key before doing anything.
+    // ============================================================
+    function sanitizeFilename(raw) {
+        if (!raw) return '';
+        let name = String(raw).trim();
+        // strip markdown/code wrappers and quotes the model might add
+        name = name.replace(/^[`*_'"]+|[`*_'"]+$/g, '');
+        // strip a leading "./"
+        name = name.replace(/^\.\//, '');
+        // strip trailing punctuation accidentally captured
+        name = name.replace(/[,.;:]+$/, '');
+        // collapse internal whitespace, disallow path traversal and slashes
+        name = name.trim();
+        name = name.replace(/\.\.+/g, '.');
+        name = name.replace(/[\\/]/g, '_');
+        return name;
+    }
+
+    // Case-insensitive lookup: returns the *real* stored key, or null.
+    function resolveFilename(raw) {
+        const clean = sanitizeFilename(raw);
+        if (!clean) return null;
+        if (Object.prototype.hasOwnProperty.call(files, clean)) return clean;
+        const lower = clean.toLowerCase();
+        for (const key of Object.keys(files)) {
+            if (key.toLowerCase() === lower) return key;
+        }
+        return null;
+    }
+
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = String(str);
+        return div.innerHTML;
+    }
+
+    // ============================================================
+    // FILE PANEL
+    // ============================================================
+    function renderFiles() {
+        const keys = Object.keys(files);
+        if (keys.length === 0) {
+            fileList.innerHTML = '<div class="empty-files">No files yet</div>';
+            return;
+        }
+
+        fileList.innerHTML = '';
+        for (const name of keys) {
+            const item = document.createElement('div');
+            item.className = 'file-item' + (name === currentFile ? ' active' : '');
+
+            const fname = document.createElement('span');
+            fname.className = 'fname';
+            fname.textContent = name;
+            fname.title = name;
+
+            const delX = document.createElement('span');
+            delX.className = 'del-x';
+            delX.textContent = '✕';
+            delX.title = 'Delete file';
+            delX.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (confirm(`Удалить файл "${name}"?`)) {
+                    deleteFile(name);
+                }
+            });
+
+            item.appendChild(fname);
+            item.appendChild(delX);
+            item.addEventListener('click', () => openFile(name));
+            fileList.appendChild(item);
+        }
+    }
+
+    function openFile(name) {
+        if (!Object.prototype.hasOwnProperty.call(files, name)) {
+            console.warn('File not found:', name);
+            return;
+        }
+        currentFile = name;
+        codeEditor.value = files[name] || '';
+        codeEditor.disabled = false;
+        currentFileName.textContent = name;
+        saveHint.textContent = '';
+        dirty = false;
+        renderFiles();
+    }
+
+    function createFile(name, content) {
+        const clean = sanitizeFilename(name);
+        if (!clean) return { ok: false, error: 'Пустое имя файла' };
+        if (resolveFilename(clean)) return { ok: false, error: `Файл "${clean}" уже существует` };
+        files[clean] = content || '';
+        saveFiles();
+        renderFiles();
+        if (!currentFile) openFile(clean);
+        return { ok: true, name: clean };
+    }
+
+    function deleteFile(rawName) {
+        const real = resolveFilename(rawName);
+        if (!real) return { ok: false, error: `Файл "${rawName}" не найден` };
+        delete files[real];
+        saveFiles();
+        if (currentFile === real) {
+            currentFile = null;
+            codeEditor.value = '';
+            codeEditor.disabled = true;
+            currentFileName.textContent = 'No file selected';
+            saveHint.textContent = '';
+        }
+        renderFiles();
+        return { ok: true, name: real };
+    }
+
+    function deleteAllFiles() {
+        const count = Object.keys(files).length;
+        files = {};
+        currentFile = null;
+        codeEditor.value = '';
+        codeEditor.disabled = true;
+        currentFileName.textContent = 'No file selected';
+        saveHint.textContent = '';
+        saveFiles();
+        renderFiles();
+        return count;
+    }
+
+    function writeFile(rawName, content) {
+        const real = resolveFilename(rawName);
+        if (!real) return { ok: false, error: `Файл "${rawName}" не найден` };
+        files[real] = content;
+        saveFiles();
+        if (currentFile === real) {
+            codeEditor.value = content;
+            dirty = false;
+            saveHint.textContent = '';
+        }
+        return { ok: true, name: real };
+    }
+
+    function editLines(rawName, startLine, endLine, newContent) {
+        const real = resolveFilename(rawName);
+        if (!real) return { ok: false, error: `Файл "${rawName}" не найден` };
+        const lines = files[real].split('\n');
+        const start = Math.max(1, parseInt(startLine, 10));
+        const end = endLine ? Math.max(start, parseInt(endLine, 10)) : start;
+
+        if (Number.isNaN(start)) return { ok: false, error: 'Некорректный номер строки' };
+
+        const replacement = newContent === null || newContent === undefined
+            ? []
+            : String(newContent).split('\n');
+
+        if (start > lines.length + 1) {
+            return { ok: false, error: `Строка ${start} вне диапазона файла "${real}" (всего строк: ${lines.length})` };
+        }
+
+        const deleteCount = Math.min(end, lines.length) - start + 1;
+        lines.splice(start - 1, Math.max(0, deleteCount), ...replacement);
+
+        files[real] = lines.join('\n');
+        saveFiles();
+        if (currentFile === real) {
+            codeEditor.value = files[real];
+            dirty = false;
+            saveHint.textContent = '';
+        }
+        return { ok: true, name: real };
+    }
+
+    function deleteLines(rawName, startLine, endLine) {
+        const real = resolveFilename(rawName);
+        if (!real) return { ok: false, error: `Файл "${rawName}" не найден` };
+        const lines = files[real].split('\n');
+        const start = parseInt(startLine, 10);
+        const end = endLine ? parseInt(endLine, 10) : start;
+
+        if (Number.isNaN(start) || start < 1 || end < start || end > lines.length) {
+            return { ok: false, error: `Некорректный диапазон строк в "${real}"` };
+        }
+
+        lines.splice(start - 1, end - start + 1);
+        files[real] = lines.join('\n');
+        saveFiles();
+        if (currentFile === real) {
+            codeEditor.value = files[real];
+            dirty = false;
+            saveHint.textContent = '';
+        }
+        return { ok: true, name: real };
+    }
+
+    // ============================================================
+    // MANUAL EDITING IN THE TEXTAREA
+    // ============================================================
+    codeEditor.addEventListener('input', () => {
+        if (!currentFile) return;
+        files[currentFile] = codeEditor.value;
+        dirty = true;
+        saveHint.textContent = 'Saving…';
+        clearTimeout(codeEditor._saveTimer);
+        codeEditor._saveTimer = setTimeout(() => {
+            saveFiles();
+            dirty = false;
+            saveHint.textContent = 'Saved';
+            setTimeout(() => { if (!dirty) saveHint.textContent = ''; }, 1200);
+        }, 400);
+    });
+
+    addFileBtn.addEventListener('click', () => {
+        const name = prompt('Имя нового файла:');
+        if (name === null) return;
+        const result = createFile(name, '');
+        if (!result.ok) alert(result.error);
+        else openFile(result.name);
+    });
+
+    // ============================================================
+    // CHAT RENDERING
+    // ============================================================
+    const ACTION_LABELS = {
+        createfile: 'Created file',
+        deletefile: 'Deleted file',
+        deleteall: 'Deleted all files',
+        writefile: 'Wrote file',
+        editlines: 'Edited lines',
+        deletelines: 'Deleted lines',
+        error: 'Error'
+    };
+
+    function buildActionBoxHtml(action) {
+        const label = ACTION_LABELS[action.type] || action.type;
+        const isError = !action.ok;
+        const titleClass = isError ? 'action-title action-error' : 'action-title';
+        const detail = isError ? (action.error || 'Unknown error') : (action.detail || '');
+        return `
+            <div class="action-box">
+                <div class="${titleClass}">${escapeHtml(label)}</div>
+                <span class="action-detail">${escapeHtml(detail)}</span>
+            </div>
+        `;
+    }
+
+    function renderChatMessageEl(msg) {
+        const div = document.createElement('div');
+        div.className = `chat-msg ${msg.role}`;
+
+        if (msg.role === 'ai' && msg.actions && msg.actions.length) {
+            let html = `<div><span class="command-badge">/executed</span> ${escapeHtml(msg.content || 'Done')}</div>`;
+            for (const action of msg.actions) {
+                html += buildActionBoxHtml(action);
+            }
+            div.innerHTML = html;
+        } else {
+            // Plain text only -- never innerHTML for raw model output.
+            div.textContent = msg.content;
+        }
+        return div;
+    }
+
+    function addChatMessage(role, content, actions) {
+        const empty = chatMessages.querySelector('.empty-chat');
+        if (empty) empty.remove();
+
+        const msg = { role, content, actions: actions || null };
+        const el = renderChatMessageEl(msg);
+        chatMessages.appendChild(el);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+
+        chatHistory.push(msg);
+        saveChat();
+        return el;
+    }
+
+    function addSystemMessage(text) {
+        const empty = chatMessages.querySelector('.empty-chat');
+        if (empty) empty.remove();
+        const div = document.createElement('div');
+        div.className = 'chat-msg system';
+        div.textContent = text;
+        chatMessages.appendChild(div);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function renderChatHistory() {
+        chatMessages.innerHTML = '';
+        if (chatHistory.length === 0) {
+            chatMessages.innerHTML = '<div class="empty-chat">Ask me to create, edit, or delete files</div>';
+            return;
+        }
+        for (const msg of chatHistory) {
+            chatMessages.appendChild(renderChatMessageEl(msg));
+        }
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function clearChat() {
+        chatHistory = [];
+        saveChat();
+        renderChatHistory();
+    }
+
+    function startCooldown() {
+        isCooldown = true;
+        chatSendBtn.disabled = true;
+        let seconds = COOLDOWN_SECONDS;
+        chatSendBtn.textContent = `${seconds}s`;
+
+        const timer = setInterval(() => {
+            seconds--;
+            if (seconds > 0) {
+                chatSendBtn.textContent = `${seconds}s`;
+            } else {
+                clearInterval(timer);
+                isCooldown = false;
+                chatSendBtn.disabled = false;
+                chatSendBtn.textContent = 'Send';
+            }
+        }, 1000);
+    }
+
+    // ============================================================
+    // ACTION EXECUTION
+    // The model is asked to return ONLY JSON (see system prompt
+    // below). This removes the regex-parsing fragility entirely:
+    // no more guessing about quotes, casing or line breaks.
+    // ============================================================
+    function executeActions(actionList) {
+        const results = [];
+        for (const raw of actionList) {
+            const type = String(raw.type || '').toLowerCase();
+            let result;
+
+            switch (type) {
+                case 'createfile': {
+                    result = createFile(raw.filename, raw.content || '');
+                    results.push({
+                        type: 'createfile',
+                        ok: result.ok,
+                        detail: result.ok ? `"${result.name}"` : null,
+                        error: result.ok ? null : result.error
+                    });
+                    break;
+                }
+                case 'deletefile': {
+                    result = deleteFile(raw.filename);
+                    results.push({
+                        type: 'deletefile',
+                        ok: result.ok,
+                        detail: result.ok ? `"${result.name}"` : null,
+                        error: result.ok ? null : result.error
+                    });
+                    break;
+                }
+                case 'deleteall': {
+                    const count = deleteAllFiles();
+                    results.push({
+                        type: 'deleteall',
+                        ok: true,
+                        detail: `Deleted ${count} file(s)`
+                    });
+                    break;
+                }
+                case 'writefile': {
+                    result = writeFile(raw.filename, raw.content || '');
+                    results.push({
+                        type: 'writefile',
+                        ok: result.ok,
+                        detail: result.ok ? `"${result.name}"` : null,
+                        error: result.ok ? null : result.error
+                    });
+                    break;
+                }
+                case 'editlines': {
+                    result = editLines(raw.filename, raw.start_line, raw.end_line, raw.content);
+                    results.push({
+                        type: 'editlines',
+                        ok: result.ok,
+                        detail: result.ok ? `"${result.name}" line(s) ${raw.start_line}${raw.end_line ? '-' + raw.end_line : ''}` : null,
+                        error: result.ok ? null : result.error
+                    });
+                    break;
+                }
+                case 'deletelines': {
+                    result = deleteLines(raw.filename, raw.start_line, raw.end_line);
+                    results.push({
+                        type: 'deletelines',
+                        ok: result.ok,
+                        detail: result.ok ? `"${result.name}" line(s) ${raw.start_line}${raw.end_line ? '-' + raw.end_line : ''}` : null,
+                        error: result.ok ? null : result.error
+                    });
+                    break;
+                }
+                default: {
+                    results.push({
+                        type: type || 'unknown',
+                        ok: false,
+                        error: `Unknown action type "${raw.type}"`
+                    });
+                }
+            }
+        }
+        return results;
+    }
+
+    // ============================================================
+    // MODEL CALL
+    // ============================================================
+    function buildSystemPrompt() {
+        const fileListStr = Object.keys(files).join(', ') || 'none';
+        return `You are Levino Flash, an AI assistant embedded in a code editor.
+
+You MUST respond with a single JSON object and NOTHING else: no markdown
+fences, no commentary outside the JSON, no leading/trailing text.
+
+JSON shape:
+{
+  "reply": "short human-readable message, in the user's language",
+  "actions": [ ... zero or more action objects ... ]
+}
+
+Allowed action objects:
+{"type": "createfile", "filename": "name.ext", "content": "optional initial content"}
+{"type": "deletefile", "filename": "name.ext"}
+{"type": "deleteall"}
+{"type": "writefile", "filename": "name.ext", "content": "full new file content"}
+{"type": "editlines", "filename": "name.ext", "start_line": 3, "end_line": 3, "content": "new text for those lines"}
+{"type": "deletelines", "filename": "name.ext", "start_line": 3, "end_line": 5}
+
+Rules:
+- filename must be the bare name exactly as listed in CURRENT FILES (no quotes, no backticks, no markdown).
+- end_line is optional; omit it for a single line.
+- Only include actions the user actually asked for. If no file operation was requested, return "actions": [].
+- Never invent file names that were not given by the user and do not already exist, unless the user is asking to create a new file.
+- "reply" must always be in the same language the user is writing in.
+
+CURRENT FILES: ${fileListStr}
+CURRENT OPEN FILE: ${currentFile || 'none'}`;
+    }
+
+    async function callModel(userMessage) {
+        const history = chatHistory.slice(-MAX_HISTORY_MESSAGES).map(msg => ({
+            role: msg.role === 'user' ? 'user' : 'assistant',
+            content: msg.content
+        }));
+
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${API_KEY}`
+            },
+            body: JSON.stringify({
+                model: MODEL,
+                max_completion_tokens: 2048,
+                temperature: 0.3,
+                top_p: 1,
+                stream: false,
+                response_format: { type: 'json_object' },
+                messages: [
+                    { role: 'system', content: buildSystemPrompt() },
+                    ...history,
+                    { role: 'user', content: userMessage }
+                ]
+            })
+        });
+
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`API error ${response.status}: ${errText.slice(0, 300)}`);
+        }
+
+        const data = await response.json();
+        const text = data.choices?.[0]?.message?.content;
+        if (!text) throw new Error('Empty response from model');
+        return text;
+    }
+
+    function parseModelJson(text) {
+        let cleaned = text.trim();
+        // Defensive: strip ```json fences if the model adds them anyway.
+        cleaned = cleaned.replace(/^```json\s*/i, '').replace(/^```\s*/, '').replace(/```\s*$/, '');
+        let parsed;
+        try {
+            parsed = JSON.parse(cleaned);
+        } catch (e) {
+            throw new Error('Model did not return valid JSON');
+        }
+        if (typeof parsed.reply !== 'string') parsed.reply = 'Done';
+        if (!Array.isArray(parsed.actions)) parsed.actions = [];
+        return parsed;
+    }
+
+    async function sendToAI(userMessage) {
+        const trimmed = userMessage.trim();
+        if (!trimmed || isProcessing || isCooldown) return;
+
+        addChatMessage('user', trimmed);
+        chatInput.value = '';
+        isProcessing = true;
+        chatSendBtn.disabled = true;
+        chatSendBtn.textContent = '...';
+
+        try {
+            const rawText = await callModel(trimmed);
+            const parsed = parseModelJson(rawText);
+            const results = parsed.actions.length ? executeActions(parsed.actions) : null;
+            addChatMessage('ai', parsed.reply, results);
+        } catch (error) {
+            console.error(error);
+            let message = error.message;
+            // "Failed to fetch" almost always means the browser blocked the
+            // request before it even reached Cerebras -- usually because the
+            // page was opened as file:// instead of through a local server,
+            // or because something (ad blocker / antivirus / offline) is
+            // intercepting the request.
+            if (/failed to fetch/i.test(message)) {
+                if (location.protocol === 'file:') {
+                    message = 'Запрос блокируется браузером, потому что страница открыта как файл (file://). ' +
+                        'Запустите её через локальный сервер, например: откройте папку с файлом в терминале и ' +
+                        'выполните "python3 -m http.server 8000", затем откройте http://localhost:8000/' +
+                        ' в браузере вместо двойного клика по файлу.';
+                } else {
+                    message = 'Не удалось достучаться до api.cerebras.ai. Проверьте интернет-соединение, ' +
+                        'отключите блокировщики рекламы/VPN для этой страницы и повторите попытку.';
+                }
+            }
+            addChatMessage('ai', `Ошибка: ${message}`, [{ type: 'error', ok: false, error: message }]);
+        }
+
+        isProcessing = false;
+        startCooldown();
+        chatInput.focus();
+    }
+
+    chatSendBtn.addEventListener('click', () => sendToAI(chatInput.value));
+    chatInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendToAI(chatInput.value);
+        }
+    });
+    clearChatBtn.addEventListener('click', () => {
+        if (confirm('Очистить историю чата?')) clearChat();
+    });
+
+    // ============================================================
+    // INIT
+    // ============================================================
+    if (!loadFiles()) {
+        files = { 'main.py': 'print("Hello, World!")' };
+        saveFiles();
+    }
+
+    loadChat();
+    renderFiles();
+    renderChatHistory();
+
+    const firstKey = Object.keys(files)[0];
+    if (firstKey) openFile(firstKey);
+
+    if (location.protocol === 'file:') {
+        addSystemMessage('Страница открыта как файл (file://) — запросы к API могут блокироваться браузером. ' +
+            'Если ассистент не отвечает с ошибкой "Failed to fetch", запустите страницу через локальный сервер ' +
+            '(например "python3 -m http.server" в папке с файлом) и откройте её по http://localhost:....');
+    }
+})();
+</script>
+</body>
+</html>
