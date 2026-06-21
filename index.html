@@ -43,7 +43,10 @@ body {
     color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 1px;
     margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;
 }
+.panel-title .title-actions { display: flex; gap: 10px; align-items: center; }
 .panel-title .add-btn { cursor: pointer; color: var(--accent); font-size: 15px; line-height: 1; }
+.panel-title .add-btn:hover { color: var(--accent-soft); }
+.file-panel.drag-over { background: #1a2230; box-shadow: inset 0 0 0 2px rgba(199,177,143,0.4); }
 .file-item {
     padding: 8px 10px; border-radius: 6px; color: #a0b0c0; font-size: 13px; cursor: pointer;
     transition: 0.15s; font-family: var(--mono); user-select: none;
@@ -59,6 +62,19 @@ body {
 }
 .file-item.active .del-x { color: var(--accent); }
 
+.folder-item {
+    padding: 7px 10px; border-radius: 6px; color: #8a9aaa; font-size: 13px; cursor: pointer;
+    transition: 0.15s; font-family: var(--mono); user-select: none;
+    display: flex; align-items: center; gap: 5px;
+}
+.folder-item:hover { background: #1f2833; }
+.folder-item .folder-caret { font-size: 10px; width: 10px; flex-shrink: 0; transition: transform 0.15s; color: var(--text-faint); }
+.folder-item.expanded .folder-caret { transform: rotate(90deg); }
+.folder-item .folder-icon { flex-shrink: 0; opacity: 0.8; }
+.folder-item .fname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-children { overflow: hidden; }
+.tree-children.collapsed { display: none; }
+
 .code-panel { flex: 1; background: var(--code-bg); display: flex; flex-direction: column; min-width: 0; }
 .code-header {
     padding: 8px 16px; background: #161b22; border-bottom: 1px solid var(--border);
@@ -67,14 +83,13 @@ body {
 .code-header .file-name { color: var(--text); font-size: 13px; font-family: var(--mono); }
 .code-header .save-hint { color: var(--text-faint); font-size: 11px; }
 
-.code-body { flex: 1; position: relative; overflow: hidden; --gutter-w: 28px; }
+.code-body { flex: 1; position: relative; overflow: hidden; --gutter-w: 38px; }
 .line-gutter {
     position: absolute; inset: 0; width: var(--gutter-w); padding: 16px 0; pointer-events: none;
     font-family: var(--mono); font-size: 14px; line-height: 1.8; white-space: pre;
     overflow: hidden; z-index: 1; text-align: right; color: var(--text-faint);
-    background: var(--code-bg); border-right: 1px solid var(--border);
 }
-.line-gutter .ln-row { display: block; height: 1.8em; padding-right: 6px; user-select: none; font-size: 11px; }
+.line-gutter .ln-row { display: block; height: 1.8em; padding-right: 14px; user-select: none; }
 .code-highlight-layer {
     position: absolute; inset: 0; padding: 16px 16px 16px var(--gutter-w); pointer-events: none;
     font-family: var(--mono); font-size: 14px; line-height: 1.8; white-space: pre;
@@ -84,7 +99,7 @@ body {
 .code-highlight-layer .hl-row.hl-read   { background: rgba(231, 195, 90, 0.16); }
 .code-highlight-layer .hl-row.hl-add    { background: rgba(90, 210, 130, 0.16); }
 .code-highlight-layer .hl-row.hl-remove { background: rgba(255, 90, 90, 0.16); }
-.code-highlight-layer .hl-row.hl-cut    { box-shadow: inset 0 2px 0 0 rgba(255, 90, 90, 0.75); }
+.code-highlight-layer .hl-row.hl-cut    { background: rgba(255, 90, 90, 0.10); }
 
 #codeEditor {
     position: relative; z-index: 3; width: 100%; height: 100%;
@@ -189,12 +204,16 @@ body {
 </div>
 
 <div class="main">
-    <div class="file-panel">
+    <div class="file-panel" id="filePanel">
         <div class="panel-title">
             <span>Files</span>
-            <span class="add-btn" id="addFileBtn" title="New file">+</span>
+            <span class="title-actions">
+                <span class="add-btn" id="importBtn" title="Import files or folders (or drag &amp; drop them here)">⇪</span>
+                <span class="add-btn" id="addFileBtn" title="New file">+</span>
+            </span>
         </div>
-        <div id="fileList"><div class="empty-files">No files yet</div></div>
+        <div id="fileList"><div class="empty-files">No files yet — drag files/folders here or click ⇪</div></div>
+        <input type="file" id="importFileInput" multiple style="display:none" />
     </div>
 
     <div class="code-panel">
@@ -244,6 +263,14 @@ let files = {};
 let currentFile = null;
 let chatHistory = [];
 let isProcessing = false;
+// Tracks, per filename, the file content as it was the last time the model
+// actually read it (full-file reads only). Lets us detect "the model is
+// re-reading something it already has and the file hasn't changed since" --
+// in that case we skip the redundant API round-trip entirely.
+let readCache = {};
+// Which folder paths are currently expanded in the file tree. Root-level
+// folders start expanded by default the first time they're seen.
+let expandedFolders = new Set();
 let isCooldown = false;
 
 const $ = id => document.getElementById(id);
@@ -258,6 +285,9 @@ const chatInput = $('chatInput');
 const chatSendBtn = $('chatSendBtn');
 const clearChatBtn = $('clearChatBtn');
 const addFileBtn = $('addFileBtn');
+const filePanel = $('filePanel');
+const importBtn = $('importBtn');
+const importFileInput = $('importFileInput');
 
 // ---------- persistence ----------
 const storage = {
@@ -278,13 +308,17 @@ const saveChat = () => storage.save('levino_chat', chatHistory);
 // so "file not found" stops happening for trivial formatting reasons.
 function sanitizeFilename(raw) {
     if (!raw) return '';
-    return String(raw).trim()
-        .replace(/^[`*_'"]+|[`*_'"]+$/g, '')
-        .replace(/^\.\//, '')
-        .replace(/[,.;:]+$/, '')
-        .replace(/\.\.+/g, '.')
-        .replace(/[\\/]/g, '_')
-        .trim();
+    // Backslashes are treated as path separators too (Windows-style paste),
+    // normalize them to forward slashes before splitting into segments.
+    const normalized = String(raw).trim().replace(/\\/g, '/');
+    const segments = normalized.split('/')
+        .map(seg => seg.trim()
+            .replace(/^[`*_'"]+|[`*_'"]+$/g, '')
+            .replace(/[,.;:]+$/, '')
+            .replace(/\.\.+/g, '.')
+            .trim())
+        .filter(seg => seg && seg !== '.' && seg !== '..');
+    return segments.join('/');
 }
 function resolveFilename(raw) {
     const clean = sanitizeFilename(raw);
@@ -300,19 +334,85 @@ function escapeHtml(str) {
 }
 
 // ---------- file panel ----------
+// Builds a nested tree from flat "a/b/c.lua" path keys.
+// Returns { folders: Map<name, node>, files: [path,...] } at each level.
+function buildFileTree() {
+    const root = { folders: new Map(), files: [] };
+    for (const path of Object.keys(files)) {
+        const parts = path.split('/').filter(Boolean);
+        let node = root;
+        let prefix = '';
+        for (let i = 0; i < parts.length - 1; i++) {
+            prefix += (prefix ? '/' : '') + parts[i];
+            if (!node.folders.has(parts[i])) {
+                node.folders.set(parts[i], { folders: new Map(), files: [], fullPath: prefix });
+            }
+            node = node.folders.get(parts[i]);
+        }
+        node.files.push(path);
+    }
+    return root;
+}
+
 function renderFiles() {
     const keys = Object.keys(files);
     if (!keys.length) { fileListEl.innerHTML = '<div class="empty-files">No files yet</div>'; return; }
 
     fileListEl.innerHTML = '';
-    for (const name of keys) {
-        const item = document.createElement('div');
-        item.className = 'file-item' + (name === currentFile ? ' active' : '');
+    const tree = buildFileTree();
+    renderTreeLevel(tree, fileListEl, 0);
+}
+
+function renderTreeLevel(node, container, depth) {
+    const folderNames = Array.from(node.folders.keys()).sort((a, b) => a.localeCompare(b));
+    for (const folderName of folderNames) {
+        const child = node.folders.get(folderName);
+        const isExpanded = expandedFolders.has(child.fullPath);
+
+        const folderEl = document.createElement('div');
+        folderEl.className = 'folder-item' + (isExpanded ? ' expanded' : '');
+        folderEl.style.paddingLeft = (10 + depth * 16) + 'px';
+
+        const caret = document.createElement('span');
+        caret.className = 'folder-caret';
+        caret.textContent = '▸';
+
+        const icon = document.createElement('span');
+        icon.className = 'folder-icon';
+        icon.textContent = isExpanded ? '📂' : '📁';
 
         const fname = document.createElement('span');
         fname.className = 'fname';
-        fname.textContent = name;
-        fname.title = name;
+        fname.textContent = folderName;
+        fname.title = child.fullPath;
+
+        folderEl.append(caret, icon, fname);
+
+        const childContainer = document.createElement('div');
+        childContainer.className = 'tree-children' + (isExpanded ? '' : ' collapsed');
+
+        folderEl.addEventListener('click', () => {
+            if (expandedFolders.has(child.fullPath)) expandedFolders.delete(child.fullPath);
+            else expandedFolders.add(child.fullPath);
+            renderFiles();
+        });
+
+        container.appendChild(folderEl);
+        container.appendChild(childContainer);
+        if (isExpanded) renderTreeLevel(child, childContainer, depth + 1);
+    }
+
+    const fileNames = node.files.slice().sort((a, b) => a.localeCompare(b));
+    for (const path of fileNames) {
+        const baseName = path.split('/').pop();
+        const item = document.createElement('div');
+        item.className = 'file-item' + (path === currentFile ? ' active' : '');
+        item.style.paddingLeft = (10 + depth * 16) + 'px';
+
+        const fname = document.createElement('span');
+        fname.className = 'fname';
+        fname.textContent = baseName;
+        fname.title = path;
 
         const delX = document.createElement('span');
         delX.className = 'del-x';
@@ -320,12 +420,12 @@ function renderFiles() {
         delX.title = 'Delete file';
         delX.addEventListener('click', e => {
             e.stopPropagation();
-            if (confirm(`Delete file "${name}"?`)) deleteFile(name);
+            if (confirm(`Delete file "${path}"?`)) deleteFile(path);
         });
 
         item.append(fname, delX);
-        item.addEventListener('click', () => openFile(name));
-        fileListEl.appendChild(item);
+        item.addEventListener('click', () => openFile(path));
+        container.appendChild(item);
     }
 }
 
@@ -390,10 +490,22 @@ function createFile(name, content) {
     return { ok: true, name: clean };
 }
 
+// Used by computer import: writes (creating or overwriting) a file at an
+// exact path without the "already exists" guard, and without touching
+// rendering/save -- the caller batches many of these then renders once.
+function importFileRaw(path, content) {
+    const clean = sanitizeFilename(path);
+    if (!clean) return null;
+    files[clean] = content;
+    delete readCache[clean];
+    return clean;
+}
+
 function deleteFile(rawName) {
     const real = resolveFilename(rawName);
     if (!real) return { ok: false, error: `File "${rawName}" not found` };
     delete files[real];
+    delete readCache[real];
     saveFiles();
     if (currentFile === real) {
         currentFile = null;
@@ -411,6 +523,7 @@ function writeFile(rawName, content) {
     if (!real) return { ok: false, error: `File "${rawName}" not found` };
     files[real] = content;
     saveFiles();
+    delete readCache[real];
     if (currentFile === real) { codeEditor.value = content; renderLineNumbers(); }
     return { ok: true, name: real };
 }
@@ -419,8 +532,9 @@ function readFile(rawName, startLine, endLine) {
     const real = resolveFilename(rawName);
     if (!real) return { ok: false, error: `File "${rawName}" not found` };
     const lines = files[real].split('\n');
+    const isFullRead = startLine == null || startLine === '';
     let start = 1, end = lines.length;
-    if (startLine != null && startLine !== '') {
+    if (!isFullRead) {
         start = Math.max(1, parseInt(startLine, 10));
         end = endLine ? Math.max(start, parseInt(endLine, 10)) : start;
         if (Number.isNaN(start) || Number.isNaN(end)) return { ok: false, error: 'Invalid line range' };
@@ -429,6 +543,7 @@ function readFile(rawName, startLine, endLine) {
     if (start > lines.length) return { ok: false, error: `Line ${start} is out of range for "${real}" (it only has ${lines.length} lines)` };
     const slice = lines.slice(start - 1, end);
     const numbered = slice.map((l, i) => `${start + i}: ${l}`).join('\n');
+    if (isFullRead) readCache[real] = { raw: files[real], numbered };
     return { ok: true, name: real, content: numbered, totalLines: lines.length, start, end };
 }
 
@@ -447,6 +562,7 @@ function editLines(rawName, startLine, endLine, newContent) {
     lines.splice(start - 1, Math.max(0, deleteCount), ...replacement);
     files[real] = lines.join('\n');
     saveFiles();
+    delete readCache[real];
     if (currentFile === real) { codeEditor.value = files[real]; renderLineNumbers(); }
     return { ok: true, name: real, start, end: start + replacement.length - 1, oldContent: oldSlice, newContent: replacement.join('\n') };
 }
@@ -464,6 +580,7 @@ function deleteLines(rawName, startLine, endLine) {
     lines.splice(start - 1, end - start + 1);
     files[real] = lines.join('\n');
     saveFiles();
+    delete readCache[real];
     if (currentFile === real) { codeEditor.value = files[real]; renderLineNumbers(); }
     return { ok: true, name: real, removedContent: removed };
 }
@@ -488,6 +605,142 @@ addFileBtn.addEventListener('click', () => {
     if (name === null) return;
     const r = createFile(name, '');
     if (!r.ok) alert(r.error); else openFile(r.name);
+});
+
+// ---------- import from computer ----------
+// One button = plain multi-file picker (browsers don't allow a single
+// native dialog to pick both loose files AND folders at once -- that's an
+// OS-level limitation, not something we can work around with one input).
+// Drag & drop covers the "any combination, folders included" case: dropping
+// a mix of loose files and whole folders onto the panel imports all of it,
+// folders and all, in one go.
+importBtn.addEventListener('click', () => {
+    importFileInput.value = '';
+    importFileInput.click();
+});
+
+// Extensions we won't try to load as text -- importing these would just
+// dump garbage/binary content into the editor.
+const BINARY_EXT = /\.(png|jpe?g|gif|webp|bmp|ico|svg|mp3|mp4|wav|ogg|webm|mov|avi|zip|rar|7z|gz|tar|pdf|exe|dll|so|class|jar|woff2?|ttf|eot|otf)$/i;
+
+function readAsText(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsText(file);
+    });
+}
+
+// Recursively walks a dropped FileSystemEntry (file or directory) and
+// resolves to a flat list of { path, file } pairs with full relative paths.
+function walkEntry(entry, prefix) {
+    return new Promise(resolve => {
+        if (entry.isFile) {
+            entry.file(file => resolve([{ path: prefix + entry.name, file }]), () => resolve([]));
+        } else if (entry.isDirectory) {
+            const reader = entry.createReader();
+            const all = [];
+            const readBatch = () => {
+                reader.readEntries(async entries => {
+                    if (!entries.length) {
+                        resolve(all);
+                        return;
+                    }
+                    for (const child of entries) {
+                        const results = await walkEntry(child, prefix + entry.name + '/');
+                        all.push(...results);
+                    }
+                    readBatch(); // readEntries must be called repeatedly until empty
+                }, () => resolve(all));
+            };
+            readBatch();
+        } else {
+            resolve([]);
+        }
+    });
+}
+
+async function importEntries(pathFilePairs) {
+    if (!pathFilePairs.length) return;
+
+    const skipped = [];
+    const imported = [];
+    let lastPath = null;
+
+    for (const { path, file } of pathFilePairs) {
+        if (BINARY_EXT.test(path)) { skipped.push(path); continue; }
+        try {
+            const text = await readAsText(file);
+            const clean = importFileRaw(path, text);
+            if (clean) { imported.push(clean); lastPath = clean; }
+        } catch (e) {
+            skipped.push(path);
+        }
+    }
+
+    if (imported.length) {
+        saveFiles();
+        // Auto-expand the folders the new files landed in so the import is
+        // immediately visible instead of looking like nothing happened.
+        imported.forEach(p => {
+            const parts = p.split('/');
+            let prefix = '';
+            for (let i = 0; i < parts.length - 1; i++) {
+                prefix += (prefix ? '/' : '') + parts[i];
+                expandedFolders.add(prefix);
+            }
+        });
+        renderFiles();
+        if (lastPath) openFile(lastPath);
+    }
+
+    if (skipped.length) {
+        addSystemMessage(`Skipped ${skipped.length} file(s) that look binary (images, archives, etc.) -- this editor only handles text/code: ${skipped.slice(0, 5).join(', ')}${skipped.length > 5 ? '…' : ''}`);
+    }
+}
+
+// Plain picker: no relative paths available, files land at tree root.
+importFileInput.addEventListener('change', () => {
+    const pairs = Array.from(importFileInput.files).map(f => ({ path: f.name, file: f }));
+    importEntries(pairs);
+});
+
+// Drag & drop: works for loose files and whole folders, any mix, in one drop.
+['dragenter', 'dragover'].forEach(evt => {
+    filePanel.addEventListener(evt, e => {
+        e.preventDefault();
+        filePanel.classList.add('drag-over');
+    });
+});
+['dragleave', 'drop'].forEach(evt => {
+    filePanel.addEventListener(evt, e => {
+        if (evt === 'dragleave' && e.target !== filePanel) return;
+        filePanel.classList.remove('drag-over');
+    });
+});
+filePanel.addEventListener('drop', async e => {
+    e.preventDefault();
+    const items = e.dataTransfer?.items;
+    if (!items || !items.length) return;
+
+    const entries = Array.from(items)
+        .map(item => item.webkitGetAsEntry?.())
+        .filter(Boolean);
+
+    if (!entries.length) {
+        // Fallback for browsers without webkitGetAsEntry: treat as loose files.
+        const pairs = Array.from(e.dataTransfer.files).map(f => ({ path: f.name, file: f }));
+        await importEntries(pairs);
+        return;
+    }
+
+    const all = [];
+    for (const entry of entries) {
+        const results = await walkEntry(entry, '');
+        all.push(...results);
+    }
+    await importEntries(all);
 });
 
 // ---------- chat rendering ----------
@@ -672,47 +925,39 @@ function buildSystemPrompt() {
         return `${name} (${lineCount} lines)`;
     }).join(', ') || 'none';
 
-    return `You are Levino Flash, an AI assistant embedded in a code editor.
+    const knownFiles = Object.keys(readCache).filter(name => files[name] === readCache[name].raw);
+    const knownBlock = knownFiles.length
+        ? '\n\nFILES YOU HAVE ALREADY READ (content below is current -- do NOT call readfile on these again, just use this directly):\n' +
+          knownFiles.map(name => `--- ${name} ---\n${readCache[name].numbered}`).join('\n\n')
+        : '';
 
-Respond with a single JSON object and NOTHING else (no markdown fences, no text outside the JSON):
-{
-  "reply": "short human-readable message, in the user's language",
-  "actions": [ ... zero or more action objects, in execution order ... ]
-}
+    return `You are Levino Flash, an AI coding assistant inside a code editor.
 
-Allowed action objects:
-{"type": "createfile", "filename": "name.ext", "content": "optional initial content"}
+Reply with ONE JSON object, nothing else (no markdown fences, no extra text):
+{"reply": "short message in the user's language", "actions": [...]}
+
+Actions you can use:
+{"type": "createfile", "filename": "name.ext", "content": "..."}
 {"type": "deletefile", "filename": "name.ext"}
-{"type": "writefile", "filename": "name.ext", "content": "full new file content"}
-{"type": "editlines", "filename": "name.ext", "start_line": 3, "end_line": 3, "content": "new text for those lines"}
-{"type": "deletelines", "filename": "name.ext", "start_line": 3, "end_line": 5}
-{"type": "readfile", "filename": "name.ext", "start_line": 1, "end_line": 20}
+{"type": "writefile", "filename": "name.ext", "content": "full new content"}
+{"type": "editlines", "filename": "name.ext", "start_line": N, "end_line": N, "content": "replacement text"}
+{"type": "deletelines", "filename": "name.ext", "start_line": N, "end_line": N}
+{"type": "readfile", "filename": "name.ext", "start_line": N, "end_line": N}
 
-CURRENT FILES (with line counts): ${fileListStr}
-CURRENT OPEN FILE: ${currentFile || 'none'}
-You already know each file's actual text content from earlier readfile results or from what the user pasted -- the list above only tells you which files exist and how many lines they have, not their contents.
+Files: ${fileListStr}
+Open file: ${currentFile || 'none'}${knownBlock}
 
 Rules:
-- filename is the bare name exactly as listed above (no quotes, backticks, or markdown).
-- start_line/end_line must be within the file's line count shown above. Never guess a line number beyond it -- if you are not sure where something is, use readfile first (in the same actions array, see below) instead of guessing a number.
-- end_line is optional for single-line operations; omit both start_line/end_line in readfile to read the whole file.
-- IMPORTANT: if the user asks you to find/locate/look at something (e.g. a function, a block, a keyword) without giving you exact line numbers, and the file has more than ~25 lines, you do NOT know which lines it's on yet. In that case you MUST call readfile with NO start_line/end_line (read the ENTIRE file) so you can actually find it. Do NOT guess a small range like lines 1-20 -- that only shows you the top of the file and you will miss the target and fail the task.
-- "reply" is always in the user's language.
-- Only include actions the user actually asked for; return "actions": [] if none.
-- There is no "delete all files" action. If the user asks to delete all/every file, include one "deletefile" action per existing file (one per filename from the CURRENT FILES list above).
-- Never invent filenames the user didn't give and that don't already exist, unless they're asking to create a new file.
-
-Prefer surgical edits over full rewrites:
-- For any file longer than a few lines, prefer "editlines" or "deletelines" on the specific lines that need to change, instead of "writefile" with the entire file content retyped. Retyping the whole file risks losing or corrupting unrelated parts of it and wastes effort.
-- Only use "writefile" when the user explicitly asks to replace/rewrite the whole file, or when the file is very short (a handful of lines), or when changes are so extensive that line-by-line edits would be less reliable than a clean rewrite.
-
-How to handle "look at / fix / change something in" a file when you have NOT already seen its content this conversation:
-- This is MANDATORY, not optional: if the user's message contains BOTH a reference to a file's content AND any requested change (delete, fix, replace, remove, add, modify, rename, etc.), you MUST include the edit action(s) (editlines/deletelines/writefile/etc.) in the SAME actions array as the readfile action, in the same response, in that order (readfile first, then the edit). Returning only "readfile" when the user also asked for a change is an incomplete, wrong answer and is not acceptable.
-- Put a "readfile" action AND your best-guess edit action(s) (editlines/writefile/etc.) in the SAME actions array, in that order. You get the file content back as part of the same exchange and your edit is judged against it -- so if your guessed line numbers or content turn out wrong given what you'll see, you will be corrected in the next turn automatically. Do not split "read" and "edit" into two separate replies/messages; the user wants one answer.
-- Exception: if the user's request is ONLY to look at / show / explain a file, with no edit implied, use ONLY a "readfile" action and stop there -- do not invent an edit nobody asked for.
-- If you already saw the file's content earlier in this conversation (a readfile result is visible above in the history) and it has not changed since, do not read it again -- just edit directly using what you already know.
-
-If an action fails because a line number was out of range, your next reply must re-read the file (readfile) to get the real line count before trying again -- never repeat the same guessed number.`;
+- "filename" is the full path including folders, e.g. "src/utils/helpers.lua" -- use exact paths from the list above, no quotes or markdown around them.
+- readfile: omit start_line/end_line to read the whole file. Don't guess a small range like 1-20 hoping to find something -- if you don't know which lines you need, read the whole file.
+- Don't re-read a file listed above under "already read" -- you already have its current content.
+- If the user's request involves both viewing AND changing a file (fix/remove/add/replace/etc.), put readfile and the edit action(s) in the SAME response's actions array, in that order. Never split into "first I'll read" and a separate follow-up -- do both at once.
+- If the user only asks to view/show/explain, use just readfile.
+- editlines/deletelines need line numbers within the file's actual line count -- never guess past it.
+- Prefer editlines/deletelines for targeted changes; use writefile only for short files or full rewrites the user explicitly asked for.
+- Don't invent filenames that don't exist unless creating a new file.
+- There's no "delete all" action -- to delete every file, add one deletefile per file.
+- "reply" is always in the user's language, short and natural.`;
 }
 
 async function callModel(userMessage) {
@@ -809,20 +1054,15 @@ async function runTurn(message, depth, originalRequest) {
     // leaving the user with a dead-end "I'll read it" message.
     const readOnly = results.every(r => r.type === 'readfile');
     if (readOnly) {
-        const dump = results.filter(r => r.ok).map(r => `File "${r.filename}":\n${r.readContent}`).join('\n\n');
-        if (dump) { chatHistory.push({ role: 'user', content: dump, hidden: true }); saveChat(); }
-
-        // Default assumption: if the user's message contains ANY edit verb
-        // anywhere (not just at the start), the read was a stepping stone
-        // and we must continue with the edit automatically. Only skip the
-        // auto-continue when the message has edit intent nowhere in it.
+        // File content is now injected straight into the system prompt via
+        // readCache on the next call, so we don't need to dump it into chat
+        // history by hand -- that just duplicated context and made the
+        // model more likely to "re-read" things it already had.
         const editIntentPattern = /(удали|убери|измени|исправь|поменяй|добавь|перепиши|сделай|замени|почини|fix|change|edit|delete|remove|replace|update|add|rewrite|modify)/i;
         const looksViewOnly = !editIntentPattern.test(userAsk);
 
         if (!looksViewOnly && depth < MAX_AUTO_RETRIES) {
-            chatHistory.push({ role: 'user', content: `Вот содержимое файла, которое ты только что прочитал. Теперь выполни исходную просьбу пользователя: "${userAsk}". Добавь нужные editlines/deletelines/writefile действия в этом ответе -- не читай файл повторно.`, hidden: true });
-            saveChat();
-            await runTurn('Продолжи и внеси изменение на основе прочитанного содержимого.', depth + 1, userAsk);
+            await runTurn(`Продолжи и выполни исходную просьбу: "${userAsk}". Содержимое файла уже доступно тебе выше -- не вызывай readfile снова, сразу добавь editlines/deletelines/writefile.`, depth + 1, userAsk);
         }
         return;
     }
