@@ -69,7 +69,7 @@
 
         .file-panel .panel-title .add-btn {
             cursor: pointer;
-            color: #2b6ef0;
+            color: #c7b18f;
             font-size: 15px;
             line-height: 1;
         }
@@ -110,12 +110,13 @@
         }
 
         .file-panel .file-item.active {
-            background: #2b6ef0;
-            color: white;
+            background: #2b2519;
+            color: #e8d9bf;
+            box-shadow: inset 0 0 0 1px rgba(199,177,143,0.35);
         }
 
         .file-panel .file-item.active .del-x {
-            color: #cfe0fb;
+            color: #c7b18f;
         }
 
         .code-panel {
@@ -262,40 +263,75 @@
             text-align: center;
         }
 
-        .chat-msg .action-box {
-            background: #0d1117;
-            border: 1px solid #2a323c;
-            border-radius: 6px;
-            padding: 8px 12px;
-            margin-top: 6px;
-            font-family: 'Consolas', monospace;
+        .chat-msg .action-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        .chat-msg .action-card {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            background: linear-gradient(180deg, rgba(199,177,143,0.07), rgba(199,177,143,0.03));
+            border: 1px solid rgba(199,177,143,0.22);
+            border-radius: 10px;
+            padding: 9px 12px;
             font-size: 12px;
         }
 
-        .chat-msg .action-box .action-title {
-            color: #f1fa8c;
-            font-weight: bold;
+        .chat-msg .action-card.is-error {
+            background: linear-gradient(180deg, rgba(255,90,90,0.08), rgba(255,90,90,0.03));
+            border-color: rgba(255,90,90,0.3);
         }
 
-        .chat-msg .action-box .action-title.action-error {
-            color: #ff4757;
+        .chat-msg .action-card .action-icon {
+            flex-shrink: 0;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(199,177,143,0.16);
+            color: #c7b18f;
+            font-size: 12px;
+            line-height: 1;
+            margin-top: 1px;
         }
 
-        .chat-msg .action-box .action-detail {
-            color: #8be9fd;
-            margin-top: 4px;
-            display: block;
+        .chat-msg .action-card.is-error .action-icon {
+            background: rgba(255,90,90,0.18);
+            color: #ff8a8a;
         }
 
-        .chat-msg .command-badge {
-            display: inline-block;
-            background: #2a323c;
-            color: #f0883e;
-            padding: 1px 8px;
-            border-radius: 10px;
-            font-size: 10px;
+        .chat-msg .action-card .action-body {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            min-width: 0;
+        }
+
+        .chat-msg .action-card .action-title {
+            color: #e8d9bf;
+            font-weight: 600;
+            font-size: 12.5px;
+        }
+
+        .chat-msg .action-card.is-error .action-title {
+            color: #ffb0b0;
+        }
+
+        .chat-msg .action-card .action-detail {
+            color: #8a93a0;
             font-family: 'Consolas', monospace;
-            margin-bottom: 4px;
+            font-size: 11.5px;
+            word-break: break-word;
+        }
+
+        .chat-msg .action-card.is-error .action-detail {
+            color: #d99a9a;
         }
 
         .chat-input-area {
@@ -318,7 +354,7 @@
         }
 
         .chat-input-area input:focus {
-            border-color: #2b6ef0;
+            border-color: #c7b18f;
         }
 
         .chat-input-area input::placeholder {
@@ -326,19 +362,20 @@
         }
 
         .chat-input-area button {
-            background: #2b6ef0;
+            background: #c7b18f;
             border: none;
-            color: white;
+            color: #14181e;
             padding: 6px 16px;
             border-radius: 20px;
             cursor: pointer;
             font-size: 13px;
+            font-weight: 600;
             transition: 0.15s;
             min-width: 80px;
         }
 
         .chat-input-area button:hover:not(:disabled) {
-            background: #3a7df5;
+            background: #d9c5a8;
         }
 
         .chat-input-area button:disabled {
@@ -668,6 +705,33 @@
         return { ok: true, name: real };
     }
 
+    // Returns the file content (optionally a line range) with line numbers,
+    // so the model can inspect a file before deciding how to edit it.
+    function readFile(rawName, startLine, endLine) {
+        const real = resolveFilename(rawName);
+        if (!real) return { ok: false, error: `Файл "${rawName}" не найден` };
+        const lines = files[real].split('\n');
+
+        let start = 1;
+        let end = lines.length;
+        if (startLine !== undefined && startLine !== null && startLine !== '') {
+            start = Math.max(1, parseInt(startLine, 10));
+            end = endLine ? Math.max(start, parseInt(endLine, 10)) : start;
+            if (Number.isNaN(start) || Number.isNaN(end)) {
+                return { ok: false, error: 'Некорректный диапазон строк' };
+            }
+            end = Math.min(end, lines.length);
+        }
+
+        if (start > lines.length) {
+            return { ok: false, error: `Строка ${start} вне диапазона файла "${real}" (всего строк: ${lines.length})` };
+        }
+
+        const slice = lines.slice(start - 1, end);
+        const numbered = slice.map((line, i) => `${start + i}: ${line}`).join('\n');
+        return { ok: true, name: real, content: numbered, totalLines: lines.length, start, end };
+    }
+
     function editLines(rawName, startLine, endLine, newContent) {
         const real = resolveFilename(rawName);
         if (!real) return { ok: false, error: `Файл "${rawName}" не найден` };
@@ -748,25 +812,32 @@
     // ============================================================
     // CHAT RENDERING
     // ============================================================
-    const ACTION_LABELS = {
-        createfile: 'Created file',
-        deletefile: 'Deleted file',
-        deleteall: 'Deleted all files',
-        writefile: 'Wrote file',
-        editlines: 'Edited lines',
-        deletelines: 'Deleted lines',
-        error: 'Error'
+    const ACTION_META = {
+        createfile:  { label: 'Создан файл',     icon: '+' },
+        deletefile:  { label: 'Удалён файл',     icon: '✕' },
+        deleteall:   { label: 'Удалены все файлы', icon: '✕' },
+        writefile:   { label: 'Файл перезаписан', icon: '✎' },
+        editlines:   { label: 'Строки изменены',  icon: '✎' },
+        deletelines: { label: 'Строки удалены',   icon: '✕' },
+        readfile:    { label: 'Файл прочитан',    icon: '◎' },
+        error:       { label: 'Ошибка',           icon: '!' },
+        unknown:     { label: 'Действие',         icon: '•' }
     };
 
-    function buildActionBoxHtml(action) {
-        const label = ACTION_LABELS[action.type] || action.type;
+    function buildActionCardHtml(action) {
+        const meta = ACTION_META[action.type] || ACTION_META.unknown;
         const isError = !action.ok;
-        const titleClass = isError ? 'action-title action-error' : 'action-title';
+        const cardClass = isError ? 'action-card is-error' : 'action-card';
+        const title = isError ? (ACTION_META.error.label) : meta.label;
+        const icon = isError ? ACTION_META.error.icon : meta.icon;
         const detail = isError ? (action.error || 'Unknown error') : (action.detail || '');
         return `
-            <div class="action-box">
-                <div class="${titleClass}">${escapeHtml(label)}</div>
-                <span class="action-detail">${escapeHtml(detail)}</span>
+            <div class="${cardClass}">
+                <span class="action-icon">${escapeHtml(icon)}</span>
+                <span class="action-body">
+                    <span class="action-title">${escapeHtml(title)}</span>
+                    <span class="action-detail">${escapeHtml(detail)}</span>
+                </span>
             </div>
         `;
     }
@@ -776,11 +847,18 @@
         div.className = `chat-msg ${msg.role}`;
 
         if (msg.role === 'ai' && msg.actions && msg.actions.length) {
-            let html = `<div><span class="command-badge">/executed</span> ${escapeHtml(msg.content || 'Done')}</div>`;
+            const replyEl = document.createElement('div');
+            replyEl.textContent = msg.content || 'Done';
+            div.appendChild(replyEl);
+
+            const list = document.createElement('div');
+            list.className = 'action-list';
+            let html = '';
             for (const action of msg.actions) {
-                html += buildActionBoxHtml(action);
+                html += buildActionCardHtml(action);
             }
-            div.innerHTML = html;
+            list.innerHTML = html;
+            div.appendChild(list);
         } else {
             // Plain text only -- never innerHTML for raw model output.
             div.textContent = msg.content;
@@ -814,11 +892,12 @@
 
     function renderChatHistory() {
         chatMessages.innerHTML = '';
-        if (chatHistory.length === 0) {
+        const visible = chatHistory.filter(m => !m.hidden);
+        if (visible.length === 0) {
             chatMessages.innerHTML = '<div class="empty-chat">Ask me to create, edit, or delete files</div>';
             return;
         }
-        for (const msg of chatHistory) {
+        for (const msg of visible) {
             chatMessages.appendChild(renderChatMessageEl(msg));
         }
         chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -911,6 +990,22 @@
                     });
                     break;
                 }
+                case 'readfile': {
+                    result = readFile(raw.filename, raw.start_line, raw.end_line);
+                    results.push({
+                        type: 'readfile',
+                        ok: result.ok,
+                        detail: result.ok
+                            ? `"${result.name}" строки ${result.start}-${result.end} из ${result.totalLines}`
+                            : null,
+                        error: result.ok ? null : result.error,
+                        // Not shown in the card UI, used internally to feed
+                        // the content back to the model on the next turn.
+                        readContent: result.ok ? result.content : null,
+                        readFilename: result.ok ? result.name : null
+                    });
+                    break;
+                }
                 case 'deletelines': {
                     result = deleteLines(raw.filename, raw.start_line, raw.end_line);
                     results.push({
@@ -956,13 +1051,16 @@ Allowed action objects:
 {"type": "writefile", "filename": "name.ext", "content": "full new file content"}
 {"type": "editlines", "filename": "name.ext", "start_line": 3, "end_line": 3, "content": "new text for those lines"}
 {"type": "deletelines", "filename": "name.ext", "start_line": 3, "end_line": 5}
+{"type": "readfile", "filename": "name.ext", "start_line": 1, "end_line": 20}
 
 Rules:
 - filename must be the bare name exactly as listed in CURRENT FILES (no quotes, no backticks, no markdown).
-- end_line is optional; omit it for a single line.
+- end_line is optional; omit it for a single line. For readfile, omit both start_line and end_line to read the whole file.
 - Only include actions the user actually asked for. If no file operation was requested, return "actions": [].
 - Never invent file names that were not given by the user and do not already exist, unless the user is asking to create a new file.
 - "reply" must always be in the same language the user is writing in.
+- If you need to see a file's current content before editing it (e.g. the user says "fix the bug in main.py" without telling you what's wrong, or asks you to change something relative to existing code), respond with ONLY a "readfile" action and a short reply like "Читаю файл, сейчас отвечу." Do NOT also include edit actions in that same turn — you have not seen the content yet. You will automatically be shown the file content right after, in a follow-up system message, and can then respond again with the real edit actions.
+- Only use readfile when you genuinely need to see the current content. If the user already pasted the relevant code or told you exactly what to write, skip straight to the edit action.
 
 CURRENT FILES: ${fileListStr}
 CURRENT OPEN FILE: ${currentFile || 'none'}`;
@@ -1021,6 +1119,8 @@ CURRENT OPEN FILE: ${currentFile || 'none'}`;
         return parsed;
     }
 
+    const MAX_AUTO_CONTINUATIONS = 2; // safety cap against accidental loops
+
     async function sendToAI(userMessage) {
         const trimmed = userMessage.trim();
         if (!trimmed || isProcessing || isCooldown) return;
@@ -1032,10 +1132,7 @@ CURRENT OPEN FILE: ${currentFile || 'none'}`;
         chatSendBtn.textContent = '...';
 
         try {
-            const rawText = await callModel(trimmed);
-            const parsed = parseModelJson(rawText);
-            const results = parsed.actions.length ? executeActions(parsed.actions) : null;
-            addChatMessage('ai', parsed.reply, results);
+            await runTurn(trimmed, 0);
         } catch (error) {
             console.error(error);
             let message = error.message;
@@ -1061,6 +1158,37 @@ CURRENT OPEN FILE: ${currentFile || 'none'}`;
         isProcessing = false;
         startCooldown();
         chatInput.focus();
+    }
+
+    // Runs one model call, executes any actions, and -- if the model only
+    // asked to read a file -- automatically feeds the file content back and
+    // lets the model respond again with the real edit. This is what makes
+    // "readfile" actually useful: the user doesn't have to paste the file
+    // content themselves or send a second message.
+    async function runTurn(message, depth) {
+        const rawText = await callModel(message);
+        const parsed = parseModelJson(rawText);
+        const results = parsed.actions.length ? executeActions(parsed.actions) : null;
+        addChatMessage('ai', parsed.reply, results);
+
+        if (!results) return;
+
+        const readActions = results.filter(r => r.type === 'readfile' && r.ok);
+        const hasNonReadActions = results.some(r => r.type !== 'readfile');
+
+        if (readActions.length && !hasNonReadActions && depth < MAX_AUTO_CONTINUATIONS) {
+            const followUp = readActions
+                .map(r => `Содержимое файла "${r.readFilename}":\n${r.readContent}`)
+                .join('\n\n');
+            const followUpMessage = `${followUp}\n\nТеперь продолжи и сделай нужную правку, ответив JSON-объектом с действиями.`;
+
+            // Keep this in chatHistory (so future turns know the file was
+            // read) without rendering it as a visible chat bubble.
+            chatHistory.push({ role: 'user', content: followUpMessage, hidden: true });
+            saveChat();
+
+            await runTurn(followUpMessage, depth + 1);
+        }
     }
 
     chatSendBtn.addEventListener('click', () => sendToAI(chatInput.value));
