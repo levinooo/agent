@@ -513,10 +513,6 @@ function renderChatMessageEl(msg) {
     div.className = `chat-msg ${msg.role}`;
 
     if (msg.role === 'ai' && msg.actions?.length) {
-        const replyEl = document.createElement('div');
-        replyEl.textContent = msg.content || 'Done';
-        div.appendChild(replyEl);
-
         const list = document.createElement('div');
         list.className = 'action-list';
         list.innerHTML = msg.actions.map((a, i) => buildActionCardHtml(a, i)).join('');
@@ -530,6 +526,11 @@ function renderChatMessageEl(msg) {
             });
         });
         div.appendChild(list);
+
+        const replyEl = document.createElement('div');
+        replyEl.style.marginTop = '8px';
+        replyEl.textContent = msg.content || 'Done';
+        div.appendChild(replyEl);
     } else {
         div.textContent = msg.content; // never innerHTML for raw model text
     }
@@ -658,6 +659,7 @@ Rules:
 - filename is the bare name exactly as listed above (no quotes, backticks, or markdown).
 - start_line/end_line must be within the file's line count shown above. Never guess a line number beyond it -- if you are not sure where something is, use readfile first (in the same actions array, see below) instead of guessing a number.
 - end_line is optional for single-line operations; omit both start_line/end_line in readfile to read the whole file.
+- IMPORTANT: if the user asks you to find/locate/look at something (e.g. a function, a block, a keyword) without giving you exact line numbers, and the file has more than ~25 lines, you do NOT know which lines it's on yet. In that case you MUST call readfile with NO start_line/end_line (read the ENTIRE file) so you can actually find it. Do NOT guess a small range like lines 1-20 -- that only shows you the top of the file and you will miss the target and fail the task.
 - "reply" is always in the user's language.
 - Only include actions the user actually asked for; return "actions": [] if none.
 - Never invent filenames the user didn't give and that don't already exist, unless they're asking to create a new file.
@@ -667,6 +669,7 @@ Prefer surgical edits over full rewrites:
 - Only use "writefile" when the user explicitly asks to replace/rewrite the whole file, or when the file is very short (a handful of lines), or when changes are so extensive that line-by-line edits would be less reliable than a clean rewrite.
 
 How to handle "look at / fix / change something in" a file when you have NOT already seen its content this conversation:
+- This is MANDATORY, not optional: if the user's message contains BOTH a reference to a file's content AND any requested change (delete, fix, replace, remove, add, modify, rename, etc.), you MUST include the edit action(s) (editlines/deletelines/writefile/etc.) in the SAME actions array as the readfile action, in the same response, in that order (readfile first, then the edit). Returning only "readfile" when the user also asked for a change is an incomplete, wrong answer and is not acceptable.
 - Put a "readfile" action AND your best-guess edit action(s) (editlines/writefile/etc.) in the SAME actions array, in that order. You get the file content back as part of the same exchange and your edit is judged against it -- so if your guessed line numbers or content turn out wrong given what you'll see, you will be corrected in the next turn automatically. Do not split "read" and "edit" into two separate replies/messages; the user wants one answer.
 - Exception: if the user's request is ONLY to look at / show / explain a file, with no edit implied, use ONLY a "readfile" action and stop there -- do not invent an edit nobody asked for.
 - If you already saw the file's content earlier in this conversation (a readfile result is visible above in the history) and it has not changed since, do not read it again -- just edit directly using what you already know.
