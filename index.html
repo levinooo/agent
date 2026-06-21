@@ -140,6 +140,12 @@ body {
 .action-detail { color: #8a93a0; font-family: var(--mono); font-size: 11.5px; word-break: break-word; }
 .action-card.is-error .action-detail { color: #d99a9a; }
 .action-hint { color: #6f7a86; font-size: 10.5px; margin-top: 2px; }
+.action-diff {
+    margin-top: 4px; padding: 6px 8px; background: rgba(0,0,0,0.25); border-radius: 6px;
+    font-family: var(--mono); font-size: 11px; line-height: 1.5; overflow-x: auto;
+}
+.action-diff .diff-old { color: #ff8a8a; white-space: pre-wrap; word-break: break-word; }
+.action-diff .diff-new { color: #7ee2a0; white-space: pre-wrap; word-break: break-word; margin-top: 4px; }
 
 .chat-input-area { padding: 10px 16px; border-top: 1px solid var(--border); display: flex; gap: 8px; flex-shrink: 0; }
 .chat-input-area input {
@@ -340,7 +346,7 @@ function applyHighlight(kind, start, end) {
     let html = '';
     for (let i = 1; i <= lineCount; i++) {
         const active = i >= start && i <= end;
-        html += `<span class="hl-row${active ? ' hl-' + kind : ''}"> </span>\n`;
+        html += `<span class="hl-row${active ? ' hl-' + kind : ''}"> </span>`;
     }
     highlightLayer.innerHTML = html;
 
@@ -429,13 +435,14 @@ function editLines(rawName, startLine, endLine, newContent) {
     if (Number.isNaN(start)) return { ok: false, error: 'Invalid line number' };
     if (start > lines.length + 1) return { ok: false, error: `Line ${start} is out of range for "${real}" (it only has ${lines.length} lines)` };
 
+    const oldSlice = lines.slice(start - 1, Math.min(end, lines.length)).join('\n');
     const replacement = (newContent == null) ? [] : String(newContent).split('\n');
     const deleteCount = Math.min(end, lines.length) - start + 1;
     lines.splice(start - 1, Math.max(0, deleteCount), ...replacement);
     files[real] = lines.join('\n');
     saveFiles();
     if (currentFile === real) codeEditor.value = files[real];
-    return { ok: true, name: real, start, end: start + replacement.length - 1 };
+    return { ok: true, name: real, start, end: start + replacement.length - 1, oldContent: oldSlice, newContent: replacement.join('\n') };
 }
 
 function deleteLines(rawName, startLine, endLine) {
@@ -447,11 +454,12 @@ function deleteLines(rawName, startLine, endLine) {
     if (Number.isNaN(start) || start < 1 || end < start || end > lines.length) {
         return { ok: false, error: `Line range is out of range for "${real}" (it only has ${lines.length} lines)` };
     }
+    const removed = lines.slice(start - 1, end).join('\n');
     lines.splice(start - 1, end - start + 1);
     files[real] = lines.join('\n');
     saveFiles();
     if (currentFile === real) codeEditor.value = files[real];
-    return { ok: true, name: real };
+    return { ok: true, name: real, removedContent: removed };
 }
 
 // ---------- manual editing ----------
@@ -496,12 +504,30 @@ function buildActionCardHtml(action, idx) {
     const detail = isError ? (action.error || 'Unknown error') : (action.detail || '');
     const clickable = !isError && meta.hl && action.filename;
     const hint = clickable ? '<span class="action-hint">Click to view in code</span>' : '';
+
+    let diffHtml = '';
+    if (!isError) {
+        if (action.type === 'editlines' && (action.oldContent || action.newContent)) {
+            diffHtml = `
+                <div class="action-diff">
+                    ${action.oldContent ? `<div class="diff-old">− ${escapeHtml(action.oldContent).replace(/\n/g, '<br>− ')}</div>` : ''}
+                    ${action.newContent ? `<div class="diff-new">+ ${escapeHtml(action.newContent).replace(/\n/g, '<br>+ ')}</div>` : ''}
+                </div>`;
+        } else if (action.type === 'deletelines' && action.removedContent) {
+            diffHtml = `
+                <div class="action-diff">
+                    <div class="diff-old">− ${escapeHtml(action.removedContent).replace(/\n/g, '<br>− ')}</div>
+                </div>`;
+        }
+    }
+
     return `
         <div class="action-card${isError ? ' is-error' : ''}${clickable ? ' is-clickable' : ''}" data-action-idx="${idx}">
             <span class="action-icon">${escapeHtml(icon)}</span>
             <span class="action-body">
                 <span class="action-title">${escapeHtml(title)}</span>
                 <span class="action-detail">${escapeHtml(detail)}</span>
+                ${diffHtml}
                 ${hint}
             </span>
         </div>
@@ -578,6 +604,15 @@ function startCooldown() {
     }, 1000);
 }
 
+function shortenForCard(text, maxLines, maxCharsPerLine) {
+    if (!text) return '';
+    const lines = text.split('\n').slice(0, maxLines).map(l =>
+        l.length > maxCharsPerLine ? l.slice(0, maxCharsPerLine) + '…' : l
+    );
+    const truncatedLines = text.split('\n').length > maxLines;
+    return lines.join('\n') + (truncatedLines ? '\n…' : '');
+}
+
 // ---------- action execution ----------
 // One action object maps to one of these handlers. Each returns the public
 // shape stored on the chat message (used both for the card UI and for
@@ -602,13 +637,16 @@ const HANDLERS = {
         const r = editLines(a.filename, a.start_line, a.end_line, a.content);
         const range = a.end_line ? `${a.start_line}-${a.end_line}` : `${a.start_line}`;
         return { ok: r.ok, detail: r.ok ? `"${r.name}" line(s) ${range}` : null, error: r.error,
-                 filename: r.ok ? r.name : null, start: r.ok ? r.start : null, end: r.ok ? r.end : null };
+                 filename: r.ok ? r.name : null, start: r.ok ? r.start : null, end: r.ok ? r.end : null,
+                 oldContent: r.ok ? shortenForCard(r.oldContent, 6, 60) : null,
+                 newContent: r.ok ? shortenForCard(r.newContent, 6, 60) : null };
     },
     deletelines: a => {
         const r = deleteLines(a.filename, a.start_line, a.end_line);
         const range = a.end_line ? `${a.start_line}-${a.end_line}` : `${a.start_line}`;
         return { ok: r.ok, detail: r.ok ? `"${r.name}" line(s) ${range}` : null, error: r.error,
-                 filename: r.ok ? r.name : null, start: a.start_line, end: a.end_line || a.start_line };
+                 filename: r.ok ? r.name : null, start: a.start_line, end: a.end_line || a.start_line,
+                 removedContent: r.ok ? shortenForCard(r.removedContent, 6, 60) : null };
     },
     readfile: a => {
         const r = readFile(a.filename, a.start_line, a.end_line);
