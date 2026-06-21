@@ -47,20 +47,32 @@ body {
 .panel-title .add-btn { cursor: pointer; color: var(--accent); font-size: 15px; line-height: 1; }
 .panel-title .add-btn:hover { color: var(--accent-soft); }
 .file-panel.drag-over { background: #1a2230; box-shadow: inset 0 0 0 2px rgba(199,177,143,0.4); }
+
+.ctx-menu {
+    display: none; position: fixed; z-index: 1000;
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 4px; min-width: 150px; box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+    font-size: 13px;
+}
+.ctx-menu.open { display: block; }
+.ctx-item {
+    padding: 7px 12px; border-radius: 5px; color: var(--text); cursor: pointer;
+    white-space: nowrap; user-select: none;
+}
+.ctx-item:hover { background: #1f2833; }
+.ctx-item.danger:hover { background: rgba(255,71,87,0.12); color: var(--danger); }
+.ctx-sep { height: 1px; background: var(--border); margin: 4px 2px; }
 .file-item {
     padding: 8px 10px; border-radius: 6px; color: #a0b0c0; font-size: 13px; cursor: pointer;
     transition: 0.15s; font-family: var(--mono); user-select: none;
     display: flex; justify-content: space-between; align-items: center; gap: 6px;
 }
 .file-item .fname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.file-item .del-x { color: var(--text-faint); font-size: 12px; flex-shrink: 0; }
-.file-item .del-x:hover { color: var(--danger); }
 .file-item:hover { background: #1f2833; }
 .file-item.active {
     background: #2b2519; color: var(--accent-soft);
     box-shadow: inset 0 0 0 1px rgba(199,177,143,0.35);
 }
-.file-item.active .del-x { color: var(--accent); }
 
 .folder-item {
     padding: 7px 10px; border-radius: 6px; color: #8a9aaa; font-size: 13px; cursor: pointer;
@@ -214,6 +226,7 @@ body {
         </div>
         <div id="fileList"><div class="empty-files">No files yet — drag files/folders here or click ⇪</div></div>
         <input type="file" id="importFileInput" multiple style="display:none" />
+        <input type="file" id="importFolderInput" webkitdirectory directory multiple style="display:none" />
     </div>
 
     <div class="code-panel">
@@ -245,6 +258,8 @@ body {
         </div>
     </div>
 </div>
+
+<div class="ctx-menu" id="ctxMenu"></div>
 
 <script>
 (function () {
@@ -288,6 +303,8 @@ const addFileBtn = $('addFileBtn');
 const filePanel = $('filePanel');
 const importBtn = $('importBtn');
 const importFileInput = $('importFileInput');
+const importFolderInput = $('importFolderInput');
+const ctxMenu = $('ctxMenu');
 
 // ---------- persistence ----------
 const storage = {
@@ -396,6 +413,10 @@ function renderTreeLevel(node, container, depth) {
             else expandedFolders.add(child.fullPath);
             renderFiles();
         });
+        folderEl.addEventListener('contextmenu', e => {
+            e.preventDefault();
+            openFolderContextMenu(e.clientX, e.clientY, child.fullPath);
+        });
 
         container.appendChild(folderEl);
         container.appendChild(childContainer);
@@ -414,17 +435,12 @@ function renderTreeLevel(node, container, depth) {
         fname.textContent = baseName;
         fname.title = path;
 
-        const delX = document.createElement('span');
-        delX.className = 'del-x';
-        delX.textContent = '✕';
-        delX.title = 'Delete file';
-        delX.addEventListener('click', e => {
-            e.stopPropagation();
-            if (confirm(`Delete file "${path}"?`)) deleteFile(path);
-        });
-
-        item.append(fname, delX);
+        item.append(fname);
         item.addEventListener('click', () => openFile(path));
+        item.addEventListener('contextmenu', e => {
+            e.preventDefault();
+            openFileContextMenu(e.clientX, e.clientY, path);
+        });
         container.appendChild(item);
     }
 }
@@ -480,6 +496,34 @@ codeEditor.addEventListener('scroll', () => {
 
 // ---------- file operations (single dispatch table, used by both the
 // model's JSON actions and the manual "+" button) ----------
+// Generates "file", "file2", "file3"... (no extension assumed -- this is a
+// generic scratch file) picking the first name not already taken at the
+// given folder prefix.
+function generateUntitledName(folderPrefix) {
+    const prefix = folderPrefix ? folderPrefix.replace(/\/+$/, '') + '/' : '';
+    let n = 1;
+    while (true) {
+        const candidate = prefix + (n === 1 ? 'file' : `file${n}`);
+        if (!files.hasOwnProperty(candidate)) return candidate;
+        n++;
+    }
+}
+
+function renameFile(rawOldName, rawNewName) {
+    const real = resolveFilename(rawOldName);
+    if (!real) return { ok: false, error: `File "${rawOldName}" not found` };
+    const clean = sanitizeFilename(rawNewName);
+    if (!clean) return { ok: false, error: 'Empty filename' };
+    if (clean === real) return { ok: true, name: real };
+    if (files.hasOwnProperty(clean)) return { ok: false, error: `File "${clean}" already exists` };
+    files[clean] = files[real];
+    delete files[real];
+    if (readCache[real]) { readCache[clean] = readCache[real]; delete readCache[real]; }
+    saveFiles();
+    if (currentFile === real) currentFile = clean;
+    return { ok: true, name: clean };
+}
+
 function createFile(name, content) {
     const clean = sanitizeFilename(name);
     if (!clean) return { ok: false, error: 'Empty filename' };
@@ -601,8 +645,7 @@ codeEditor.addEventListener('input', () => {
 });
 
 addFileBtn.addEventListener('click', () => {
-    const name = prompt('New file name:');
-    if (name === null) return;
+    const name = generateUntitledName('');
     const r = createFile(name, '');
     if (!r.ok) alert(r.error); else openFile(r.name);
 });
@@ -617,6 +660,13 @@ addFileBtn.addEventListener('click', () => {
 importBtn.addEventListener('click', () => {
     importFileInput.value = '';
     importFileInput.click();
+});
+importBtn.addEventListener('contextmenu', e => {
+    e.preventDefault();
+    showCtxMenu(e.clientX, e.clientY, [
+        { label: 'Import file(s)', action: () => { importFileInput.value = ''; importFileInput.click(); } },
+        { label: 'Import folder', action: () => { importFolderInput.value = ''; importFolderInput.click(); } }
+    ]);
 });
 
 // Extensions we won't try to load as text -- importing these would just
@@ -694,15 +744,15 @@ async function importEntries(pathFilePairs) {
         renderFiles();
         if (lastPath) openFile(lastPath);
     }
-
-    if (skipped.length) {
-        addSystemMessage(`Skipped ${skipped.length} file(s) that look binary (images, archives, etc.) -- this editor only handles text/code: ${skipped.slice(0, 5).join(', ')}${skipped.length > 5 ? '…' : ''}`);
-    }
 }
 
 // Plain picker: no relative paths available, files land at tree root.
 importFileInput.addEventListener('change', () => {
     const pairs = Array.from(importFileInput.files).map(f => ({ path: f.name, file: f }));
+    importEntries(pairs);
+});
+importFolderInput.addEventListener('change', () => {
+    const pairs = Array.from(importFolderInput.files).map(f => ({ path: f.webkitRelativePath || f.name, file: f }));
     importEntries(pairs);
 });
 
@@ -846,6 +896,131 @@ function renderChatHistory() {
 
 function clearChat() { chatHistory = []; saveChat(); renderChatHistory(); }
 
+// ---------- context menu ----------
+// Generic: items = [{ label, action, danger? }] or null for a separator.
+function showCtxMenu(x, y, items) {
+    ctxMenu.innerHTML = '';
+    items.forEach(item => {
+        if (item === null) {
+            const sep = document.createElement('div');
+            sep.className = 'ctx-sep';
+            ctxMenu.appendChild(sep);
+            return;
+        }
+        const el = document.createElement('div');
+        el.className = 'ctx-item' + (item.danger ? ' danger' : '');
+        el.textContent = item.label;
+        el.addEventListener('click', () => {
+            closeCtxMenu();
+            item.action();
+        });
+        ctxMenu.appendChild(el);
+    });
+
+    // Position, then nudge back on-screen if it would overflow the viewport.
+    ctxMenu.style.left = x + 'px';
+    ctxMenu.style.top = y + 'px';
+    ctxMenu.classList.add('open');
+    const rect = ctxMenu.getBoundingClientRect();
+    if (rect.right > window.innerWidth) ctxMenu.style.left = Math.max(4, window.innerWidth - rect.width - 4) + 'px';
+    if (rect.bottom > window.innerHeight) ctxMenu.style.top = Math.max(4, window.innerHeight - rect.height - 4) + 'px';
+}
+function closeCtxMenu() { ctxMenu.classList.remove('open'); }
+document.addEventListener('click', closeCtxMenu);
+document.addEventListener('contextmenu', e => {
+    // Clicking elsewhere with the right mouse button (outside a handled
+    // target) should also dismiss any menu already open, not stack a new
+    // browser-native menu on top of ours.
+    if (!e.defaultPrevented) closeCtxMenu();
+});
+window.addEventListener('blur', closeCtxMenu);
+
+function promptRename(path) {
+    const baseName = path.split('/').pop();
+    const folderPrefix = path.slice(0, path.length - baseName.length);
+    const next = prompt('Rename to:', baseName);
+    if (next === null) return;
+    const trimmed = next.trim();
+    if (!trimmed || trimmed === baseName) return;
+    const r = renameFile(path, folderPrefix + trimmed);
+    if (!r.ok) { alert(r.error); return; }
+    renderFiles();
+    if (currentFile === r.name) openFile(r.name);
+}
+
+function openFileContextMenu(x, y, path) {
+    showCtxMenu(x, y, [
+        { label: 'Rename', action: () => promptRename(path) },
+        { label: 'Delete', danger: true, action: () => {
+            if (confirm(`Delete file "${path}"?`)) deleteFile(path);
+        } }
+    ]);
+}
+
+function openFolderContextMenu(x, y, folderPath) {
+    showCtxMenu(x, y, [
+        { label: 'New file here', action: () => {
+            const name = generateUntitledName(folderPath);
+            const r = createFile(name, '');
+            if (r.ok) { expandedFolders.add(folderPath); openFile(r.name); }
+        } },
+        { label: 'Delete folder', danger: true, action: () => {
+            const prefix = folderPath + '/';
+            const inside = Object.keys(files).filter(p => p === folderPath || p.startsWith(prefix));
+            if (!inside.length) return;
+            if (!confirm(`Delete folder "${folderPath}" and its ${inside.length} file(s)?`)) return;
+            inside.forEach(p => deleteFile(p));
+        } }
+    ]);
+}
+
+// Editor (textarea) context menu: standard clipboard ops, scoped to the
+// current selection. We can't read the OS clipboard without a permission
+// prompt in most browsers, so Paste uses the synchronous clipboard API
+// where available and falls back to the browser's native paste otherwise.
+function openEditorContextMenu(x, y) {
+    showCtxMenu(x, y, [
+        { label: 'Cut', action: () => execEditorClipboard('cut') },
+        { label: 'Copy', action: () => execEditorClipboard('copy') },
+        { label: 'Paste', action: () => execEditorClipboard('paste') },
+        null,
+        { label: 'Select all', action: () => { codeEditor.focus(); codeEditor.select(); } }
+    ]);
+}
+
+async function execEditorClipboard(kind) {
+    codeEditor.focus();
+    if (kind === 'paste') {
+        try {
+            const text = await navigator.clipboard.readText();
+            const start = codeEditor.selectionStart, end = codeEditor.selectionEnd;
+            const val = codeEditor.value;
+            codeEditor.value = val.slice(0, start) + text + val.slice(end);
+            codeEditor.selectionStart = codeEditor.selectionEnd = start + text.length;
+            codeEditor.dispatchEvent(new Event('input'));
+        } catch (e) {
+            document.execCommand('paste');
+        }
+        return;
+    }
+    const start = codeEditor.selectionStart, end = codeEditor.selectionEnd;
+    if (start === end) return;
+    const selected = codeEditor.value.slice(start, end);
+    try { await navigator.clipboard.writeText(selected); } catch (e) { document.execCommand('copy'); }
+    if (kind === 'cut') {
+        const val = codeEditor.value;
+        codeEditor.value = val.slice(0, start) + val.slice(end);
+        codeEditor.selectionStart = codeEditor.selectionEnd = start;
+        codeEditor.dispatchEvent(new Event('input'));
+    }
+}
+
+codeEditor.addEventListener('contextmenu', e => {
+    if (codeEditor.disabled) return;
+    e.preventDefault();
+    openEditorContextMenu(e.clientX, e.clientY);
+});
+
 function startCooldown() {
     isCooldown = true;
     chatSendBtn.disabled = true;
@@ -919,16 +1094,33 @@ function executeActions(actionList) {
 }
 
 // ---------- model call ----------
-function buildSystemPrompt() {
-    const fileListStr = Object.keys(files).map(name => {
-        const lineCount = files[name].split('\n').length;
-        return `${name} (${lineCount} lines)`;
-    }).join(', ') || 'none';
+// Files at or under this size get their full content pushed into the
+// system prompt automatically, so the model can read AND edit in the very
+// first response -- no separate readfile round-trip, no doubled API calls/
+// token usage (and no extra trip to slam into a rate limit like 429).
+const INLINE_CONTENT_LINE_LIMIT = 180;
 
-    const knownFiles = Object.keys(readCache).filter(name => files[name] === readCache[name].raw);
-    const knownBlock = knownFiles.length
-        ? '\n\nFILES YOU HAVE ALREADY READ (content below is current -- do NOT call readfile on these again, just use this directly):\n' +
-          knownFiles.map(name => `--- ${name} ---\n${readCache[name].numbered}`).join('\n\n')
+function buildSystemPrompt() {
+    const names = Object.keys(files);
+    const fileListStr = names.map(name => `${name} (${files[name].split('\n').length} lines)`).join(', ') || 'none';
+
+    // Merge: anything already read into cache (and still current) OR small
+    // enough to inline by default, so the model has real content up front
+    // instead of needing a readfile action just to see it.
+    const inlineNames = names.filter(name => {
+        const cached = readCache[name];
+        if (cached && cached.raw === files[name]) return true;
+        return files[name].split('\n').length <= INLINE_CONTENT_LINE_LIMIT;
+    });
+
+    const contentBlock = inlineNames.length
+        ? '\n\nFILE CONTENTS (current -- use this directly, do NOT call readfile on these):\n' +
+          inlineNames.map(name => {
+              const numbered = (readCache[name] && readCache[name].raw === files[name])
+                  ? readCache[name].numbered
+                  : files[name].split('\n').map((l, i) => `${i + 1}: ${l}`).join('\n');
+              return `--- ${name} ---\n${numbered}`;
+          }).join('\n\n')
         : '';
 
     return `You are Levino Flash, an AI coding assistant inside a code editor.
@@ -945,14 +1137,14 @@ Actions you can use:
 {"type": "readfile", "filename": "name.ext", "start_line": N, "end_line": N}
 
 Files: ${fileListStr}
-Open file: ${currentFile || 'none'}${knownBlock}
+Open file: ${currentFile || 'none'}${contentBlock}
 
 Rules:
 - "filename" is the full path including folders, e.g. "src/utils/helpers.lua" -- use exact paths from the list above, no quotes or markdown around them.
-- readfile: omit start_line/end_line to read the whole file. Don't guess a small range like 1-20 hoping to find something -- if you don't know which lines you need, read the whole file.
-- Don't re-read a file listed above under "already read" -- you already have its current content.
-- If the user's request involves both viewing AND changing a file (fix/remove/add/replace/etc.), put readfile and the edit action(s) in the SAME response's actions array, in that order. Never split into "first I'll read" and a separate follow-up -- do both at once.
-- If the user only asks to view/show/explain, use just readfile.
+- If a file's content is already shown above under FILE CONTENTS, you already have everything you need -- act on it directly in this same response (e.g. editlines/deletelines/writefile). Do NOT call readfile on it.
+- Only use readfile for large files whose content is NOT shown above. When you do, put readfile AND your edit action(s) in the SAME actions array, in that order -- never split reading and editing into two separate replies.
+- readfile: omit start_line/end_line to read the whole file. Don't guess a small range hoping to find something -- if unsure, read the whole file.
+- If the user only asks to view/show/explain a file, it's fine to respond with no actions (the content is likely already visible above) or a single readfile if it's a large file not shown.
 - editlines/deletelines need line numbers within the file's actual line count -- never guess past it.
 - Prefer editlines/deletelines for targeted changes; use writefile only for short files or full rewrites the user explicitly asked for.
 - Don't invent filenames that don't exist unless creating a new file.
@@ -1005,6 +1197,28 @@ function friendlyFetchError(error) {
 
 const MAX_AUTO_RETRIES = 2; // safety cap so a persistently wrong model can't loop forever
 
+// If the user's message names an existing file (by basename or full path)
+// and that file isn't already in readCache, pre-load it there before the
+// first API call. This means the model gets the file's content straight in
+// the system prompt and can act on it in a single response, instead of a
+// "readfile" round-trip followed by a second API call for the actual edit
+// -- which matters because every extra call burns rate-limit/token budget.
+function preloadMentionedFile(message) {
+    const names = Object.keys(files);
+    if (!names.length) return;
+    let best = null;
+    for (const path of names) {
+        const base = path.split('/').pop();
+        if (readCache[path] && files[path] === readCache[path].raw) continue; // already known
+        if (message.includes(path) || message.includes(base)) {
+            // Prefer the longest match (more specific filename wins over a
+            // short substring match of another file).
+            if (!best || base.length > best.base.length) best = { path, base };
+        }
+    }
+    if (best) readFile(best.path); // populates readCache as a side effect
+}
+
 async function sendToAI(userMessage) {
     const trimmed = userMessage.trim();
     if (!trimmed || isProcessing || isCooldown) return;
@@ -1016,6 +1230,7 @@ async function sendToAI(userMessage) {
     chatSendBtn.textContent = '...';
 
     try {
+        preloadMentionedFile(trimmed);
         await runTurn(trimmed, 0);
     } catch (error) {
         console.error(error);
@@ -1091,12 +1306,6 @@ renderChatHistory();
 
 const firstKey = Object.keys(files)[0];
 if (firstKey) openFile(firstKey);
-
-if (location.protocol === 'file:') {
-    addSystemMessage('This page is open as a local file (file://) — API requests may be blocked by the browser. ' +
-        'If the assistant replies with a "Failed to fetch" error, serve this page through a local server ' +
-        '("python3 -m http.server" in this file\'s folder) and open it via http://localhost:... instead.');
-}
 })();
 </script>
 </body>
