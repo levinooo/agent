@@ -73,7 +73,7 @@ body {
     font-family: var(--mono); font-size: 14px; line-height: 1.8; white-space: pre;
     overflow: hidden; z-index: 1;
 }
-.code-highlight-layer .hl-row { display: block; min-height: 1.8em; border-radius: 3px; }
+.code-highlight-layer .hl-row { display: block; height: 1.8em; border-radius: 3px; }
 .code-highlight-layer .hl-row.hl-read   { background: rgba(231, 195, 90, 0.16); }
 .code-highlight-layer .hl-row.hl-add    { background: rgba(90, 210, 130, 0.16); }
 .code-highlight-layer .hl-row.hl-remove { background: rgba(255, 90, 90, 0.16); }
@@ -82,7 +82,7 @@ body {
     position: relative; z-index: 2; width: 100%; height: 100%;
     background: transparent; color: var(--text); border: none; padding: 16px;
     font-family: var(--mono); font-size: 14px; line-height: 1.8; outline: none;
-    resize: none; tab-size: 4;
+    resize: none; tab-size: 4; white-space: pre; overflow: auto;
 }
 #codeEditor:disabled { color: var(--text-faint); }
 #codeEditor::placeholder { color: var(--text-faint); }
@@ -310,7 +310,7 @@ function renderFiles() {
         delX.title = 'Delete file';
         delX.addEventListener('click', e => {
             e.stopPropagation();
-            if (confirm(`Удалить файл "${name}"?`)) deleteFile(name);
+            if (confirm(`Delete file "${name}"?`)) deleteFile(name);
         });
 
         item.append(fname, delX);
@@ -343,16 +343,25 @@ function applyHighlight(kind, start, end) {
         html += `<span class="hl-row${active ? ' hl-' + kind : ''}"> </span>\n`;
     }
     highlightLayer.innerHTML = html;
+
+    // Scroll the textarea so the highlighted range is actually visible.
+    const lineHeight = parseFloat(getComputedStyle(codeEditor).lineHeight) || 25;
+    const targetTop = Math.max(0, (start - 1) * lineHeight - codeEditor.clientHeight / 3);
+    codeEditor.scrollTop = targetTop;
     highlightLayer.scrollTop = codeEditor.scrollTop;
+    highlightLayer.scrollLeft = codeEditor.scrollLeft;
 }
-codeEditor.addEventListener('scroll', () => { highlightLayer.scrollTop = codeEditor.scrollTop; });
+codeEditor.addEventListener('scroll', () => {
+    highlightLayer.scrollTop = codeEditor.scrollTop;
+    highlightLayer.scrollLeft = codeEditor.scrollLeft;
+});
 
 // ---------- file operations (single dispatch table, used by both the
 // model's JSON actions and the manual "+" button) ----------
 function createFile(name, content) {
     const clean = sanitizeFilename(name);
-    if (!clean) return { ok: false, error: 'Пустое имя файла' };
-    if (resolveFilename(clean)) return { ok: false, error: `Файл "${clean}" уже существует` };
+    if (!clean) return { ok: false, error: 'Empty filename' };
+    if (resolveFilename(clean)) return { ok: false, error: `File "${clean}" already exists` };
     files[clean] = content || '';
     saveFiles(); renderFiles();
     if (!currentFile) openFile(clean);
@@ -361,7 +370,7 @@ function createFile(name, content) {
 
 function deleteFile(rawName) {
     const real = resolveFilename(rawName);
-    if (!real) return { ok: false, error: `Файл "${rawName}" не найден` };
+    if (!real) return { ok: false, error: `File "${rawName}" not found` };
     delete files[real];
     saveFiles();
     if (currentFile === real) {
@@ -387,7 +396,7 @@ function deleteAllFiles() {
 
 function writeFile(rawName, content) {
     const real = resolveFilename(rawName);
-    if (!real) return { ok: false, error: `Файл "${rawName}" не найден` };
+    if (!real) return { ok: false, error: `File "${rawName}" not found` };
     files[real] = content;
     saveFiles();
     if (currentFile === real) codeEditor.value = content;
@@ -396,16 +405,16 @@ function writeFile(rawName, content) {
 
 function readFile(rawName, startLine, endLine) {
     const real = resolveFilename(rawName);
-    if (!real) return { ok: false, error: `Файл "${rawName}" не найден` };
+    if (!real) return { ok: false, error: `File "${rawName}" not found` };
     const lines = files[real].split('\n');
     let start = 1, end = lines.length;
     if (startLine != null && startLine !== '') {
         start = Math.max(1, parseInt(startLine, 10));
         end = endLine ? Math.max(start, parseInt(endLine, 10)) : start;
-        if (Number.isNaN(start) || Number.isNaN(end)) return { ok: false, error: 'Некорректный диапазон строк' };
+        if (Number.isNaN(start) || Number.isNaN(end)) return { ok: false, error: 'Invalid line range' };
         end = Math.min(end, lines.length);
     }
-    if (start > lines.length) return { ok: false, error: `Строка ${start} вне диапазона файла "${real}" (всего строк: ${lines.length})` };
+    if (start > lines.length) return { ok: false, error: `Line ${start} is out of range for "${real}" (it only has ${lines.length} lines)` };
     const slice = lines.slice(start - 1, end);
     const numbered = slice.map((l, i) => `${start + i}: ${l}`).join('\n');
     return { ok: true, name: real, content: numbered, totalLines: lines.length, start, end };
@@ -413,12 +422,12 @@ function readFile(rawName, startLine, endLine) {
 
 function editLines(rawName, startLine, endLine, newContent) {
     const real = resolveFilename(rawName);
-    if (!real) return { ok: false, error: `Файл "${rawName}" не найден` };
+    if (!real) return { ok: false, error: `File "${rawName}" not found` };
     const lines = files[real].split('\n');
     const start = Math.max(1, parseInt(startLine, 10));
     const end = endLine ? Math.max(start, parseInt(endLine, 10)) : start;
-    if (Number.isNaN(start)) return { ok: false, error: 'Некорректный номер строки' };
-    if (start > lines.length + 1) return { ok: false, error: `Строка ${start} вне диапазона файла "${real}" (всего строк: ${lines.length})` };
+    if (Number.isNaN(start)) return { ok: false, error: 'Invalid line number' };
+    if (start > lines.length + 1) return { ok: false, error: `Line ${start} is out of range for "${real}" (it only has ${lines.length} lines)` };
 
     const replacement = (newContent == null) ? [] : String(newContent).split('\n');
     const deleteCount = Math.min(end, lines.length) - start + 1;
@@ -431,12 +440,12 @@ function editLines(rawName, startLine, endLine, newContent) {
 
 function deleteLines(rawName, startLine, endLine) {
     const real = resolveFilename(rawName);
-    if (!real) return { ok: false, error: `Файл "${rawName}" не найден` };
+    if (!real) return { ok: false, error: `File "${rawName}" not found` };
     const lines = files[real].split('\n');
     const start = parseInt(startLine, 10);
     const end = endLine ? parseInt(endLine, 10) : start;
     if (Number.isNaN(start) || start < 1 || end < start || end > lines.length) {
-        return { ok: false, error: `Некорректный диапазон строк в "${real}"` };
+        return { ok: false, error: `Line range is out of range for "${real}" (it only has ${lines.length} lines)` };
     }
     lines.splice(start - 1, end - start + 1);
     files[real] = lines.join('\n');
@@ -460,7 +469,7 @@ codeEditor.addEventListener('input', () => {
 });
 
 addFileBtn.addEventListener('click', () => {
-    const name = prompt('Имя нового файла:');
+    const name = prompt('New file name:');
     if (name === null) return;
     const r = createFile(name, '');
     if (!r.ok) alert(r.error); else openFile(r.name);
@@ -468,15 +477,15 @@ addFileBtn.addEventListener('click', () => {
 
 // ---------- chat rendering ----------
 const ACTION_META = {
-    createfile:  { label: 'Создан файл',      icon: '+', hl: 'add' },
-    deletefile:  { label: 'Удалён файл',      icon: '✕', hl: null },
-    deleteall:   { label: 'Удалены все файлы', icon: '✕', hl: null },
-    writefile:   { label: 'Файл перезаписан', icon: '✎', hl: 'add' },
-    editlines:   { label: 'Строки изменены',  icon: '✎', hl: 'add' },
-    deletelines: { label: 'Строки удалены',   icon: '✕', hl: 'remove' },
-    readfile:    { label: 'Файл прочитан',    icon: '◎', hl: 'read' },
-    error:       { label: 'Ошибка',           icon: '!', hl: null },
-    unknown:     { label: 'Действие',         icon: '•', hl: null }
+    createfile:  { label: 'File created',    icon: '+', hl: 'add' },
+    deletefile:  { label: 'File deleted',    icon: '✕', hl: null },
+    deleteall:   { label: 'All files deleted', icon: '✕', hl: null },
+    writefile:   { label: 'File rewritten',  icon: '✎', hl: 'add' },
+    editlines:   { label: 'Lines edited',    icon: '✎', hl: 'add' },
+    deletelines: { label: 'Lines deleted',   icon: '✕', hl: 'remove' },
+    readfile:    { label: 'File read',       icon: '◎', hl: 'read' },
+    error:       { label: 'Error',           icon: '!', hl: null },
+    unknown:     { label: 'Action',          icon: '•', hl: null }
 };
 
 function buildActionCardHtml(action, idx) {
@@ -486,7 +495,7 @@ function buildActionCardHtml(action, idx) {
     const icon = isError ? ACTION_META.error.icon : meta.icon;
     const detail = isError ? (action.error || 'Unknown error') : (action.detail || '');
     const clickable = !isError && meta.hl && action.filename;
-    const hint = clickable ? '<span class="action-hint">Нажмите, чтобы увидеть в коде</span>' : '';
+    const hint = clickable ? '<span class="action-hint">Click to view in code</span>' : '';
     return `
         <div class="action-card${isError ? ' is-error' : ''}${clickable ? ' is-clickable' : ''}" data-action-idx="${idx}">
             <span class="action-icon">${escapeHtml(icon)}</span>
@@ -591,18 +600,18 @@ const HANDLERS = {
     editlines: a => {
         const r = editLines(a.filename, a.start_line, a.end_line, a.content);
         const range = a.end_line ? `${a.start_line}-${a.end_line}` : `${a.start_line}`;
-        return { ok: r.ok, detail: r.ok ? `"${r.name}" строки ${range}` : null, error: r.error,
+        return { ok: r.ok, detail: r.ok ? `"${r.name}" line(s) ${range}` : null, error: r.error,
                  filename: r.ok ? r.name : null, start: r.ok ? r.start : null, end: r.ok ? r.end : null };
     },
     deletelines: a => {
         const r = deleteLines(a.filename, a.start_line, a.end_line);
         const range = a.end_line ? `${a.start_line}-${a.end_line}` : `${a.start_line}`;
-        return { ok: r.ok, detail: r.ok ? `"${r.name}" строки ${range}` : null, error: r.error,
+        return { ok: r.ok, detail: r.ok ? `"${r.name}" line(s) ${range}` : null, error: r.error,
                  filename: r.ok ? r.name : null, start: a.start_line, end: a.end_line || a.start_line };
     },
     readfile: a => {
         const r = readFile(a.filename, a.start_line, a.end_line);
-        return { ok: r.ok, detail: r.ok ? `"${r.name}" строки ${r.start}-${r.end} из ${r.totalLines}` : null, error: r.error,
+        return { ok: r.ok, detail: r.ok ? `"${r.name}" line(s) ${r.start}-${r.end} of ${r.totalLines}` : null, error: r.error,
                  filename: r.ok ? r.name : null, start: r.ok ? r.start : null, end: r.ok ? r.end : null,
                  readContent: r.ok ? r.content : null };
     }
@@ -619,7 +628,11 @@ function executeActions(actionList) {
 
 // ---------- model call ----------
 function buildSystemPrompt() {
-    const fileListStr = Object.keys(files).join(', ') || 'none';
+    const fileListStr = Object.keys(files).map(name => {
+        const lineCount = files[name].split('\n').length;
+        return `${name} (${lineCount} lines)`;
+    }).join(', ') || 'none';
+
     return `You are Levino Flash, an AI assistant embedded in a code editor.
 
 Respond with a single JSON object and NOTHING else (no markdown fences, no text outside the JSON):
@@ -637,21 +650,28 @@ Allowed action objects:
 {"type": "deletelines", "filename": "name.ext", "start_line": 3, "end_line": 5}
 {"type": "readfile", "filename": "name.ext", "start_line": 1, "end_line": 20}
 
-CURRENT FILES: ${fileListStr}
+CURRENT FILES (with line counts): ${fileListStr}
 CURRENT OPEN FILE: ${currentFile || 'none'}
-You already know each file's current content from earlier readfile results or from what the user pasted -- the CURRENT FILES list above only tells you which files exist, not their contents.
+You already know each file's actual text content from earlier readfile results or from what the user pasted -- the list above only tells you which files exist and how many lines they have, not their contents.
 
 Rules:
 - filename is the bare name exactly as listed above (no quotes, backticks, or markdown).
+- start_line/end_line must be within the file's line count shown above. Never guess a line number beyond it -- if you are not sure where something is, use readfile first (in the same actions array, see below) instead of guessing a number.
 - end_line is optional for single-line operations; omit both start_line/end_line in readfile to read the whole file.
 - "reply" is always in the user's language.
 - Only include actions the user actually asked for; return "actions": [] if none.
 - Never invent filenames the user didn't give and that don't already exist, unless they're asking to create a new file.
 
+Prefer surgical edits over full rewrites:
+- For any file longer than a few lines, prefer "editlines" or "deletelines" on the specific lines that need to change, instead of "writefile" with the entire file content retyped. Retyping the whole file risks losing or corrupting unrelated parts of it and wastes effort.
+- Only use "writefile" when the user explicitly asks to replace/rewrite the whole file, or when the file is very short (a handful of lines), or when changes are so extensive that line-by-line edits would be less reliable than a clean rewrite.
+
 How to handle "look at / fix / change something in" a file when you have NOT already seen its content this conversation:
 - Put a "readfile" action AND your best-guess edit action(s) (editlines/writefile/etc.) in the SAME actions array, in that order. You get the file content back as part of the same exchange and your edit is judged against it -- so if your guessed line numbers or content turn out wrong given what you'll see, you will be corrected in the next turn automatically. Do not split "read" and "edit" into two separate replies/messages; the user wants one answer.
 - Exception: if the user's request is ONLY to look at / show / explain a file, with no edit implied, use ONLY a "readfile" action and stop there -- do not invent an edit nobody asked for.
-- If you already saw the file's content earlier in this conversation (a readfile result is visible above in the history) and it has not changed since, do not read it again -- just edit directly using what you already know.`;
+- If you already saw the file's content earlier in this conversation (a readfile result is visible above in the history) and it has not changed since, do not read it again -- just edit directly using what you already know.
+
+If an action fails because a line number was out of range, your next reply must re-read the file (readfile) to get the real line count before trying again -- never repeat the same guessed number.`;
 }
 
 async function callModel(userMessage) {
@@ -690,12 +710,14 @@ function parseModelJson(text) {
 function friendlyFetchError(error) {
     if (!/failed to fetch/i.test(error.message)) return error.message;
     return location.protocol === 'file:'
-        ? 'Запрос блокируется браузером, потому что страница открыта как файл (file://). ' +
-          'Запустите её через локальный сервер, например: "python3 -m http.server 8000" в папке с файлом, ' +
-          'затем откройте http://localhost:8000/ вместо двойного клика по файлу.'
-        : 'Не удалось достучаться до api.cerebras.ai. Проверьте интернет-соединение, ' +
-          'отключите блокировщики рекламы/VPN для этой страницы и повторите попытку.';
+        ? 'The browser is blocking this request because the page was opened as a file (file://). ' +
+          'Serve it through a local server instead, e.g. run "python3 -m http.server 8000" in the ' +
+          'folder with this file, then open http://localhost:8000/ instead of double-clicking the file.'
+        : 'Could not reach api.cerebras.ai. Check your internet connection, disable any ad blockers/VPN ' +
+          'for this page, and try again.';
 }
+
+const MAX_AUTO_RETRIES = 2; // safety cap so a persistently wrong model can't loop forever
 
 async function sendToAI(userMessage) {
     const trimmed = userMessage.trim();
@@ -708,23 +730,11 @@ async function sendToAI(userMessage) {
     chatSendBtn.textContent = '...';
 
     try {
-        const rawText = await callModel(trimmed);
-        const parsed = parseModelJson(rawText);
-        const results = parsed.actions.length ? executeActions(parsed.actions) : null;
-        addChatMessage('ai', parsed.reply, results);
-
-        // If the model only read files without editing, surface the content
-        // as hidden context so the *next* user message doesn't need it
-        // re-read -- without showing it as a visible chat bubble.
-        const readOnly = results?.length && results.every(r => r.type === 'readfile');
-        if (readOnly) {
-            const dump = results.filter(r => r.ok).map(r => `Файл "${r.filename}":\n${r.readContent}`).join('\n\n');
-            if (dump) { chatHistory.push({ role: 'user', content: dump, hidden: true }); saveChat(); }
-        }
+        await runTurn(trimmed, 0);
     } catch (error) {
         console.error(error);
         const message = friendlyFetchError(error);
-        addChatMessage('ai', `Ошибка: ${message}`, [{ type: 'error', ok: false, error: message }]);
+        addChatMessage('ai', `Error: ${message}`, [{ type: 'error', ok: false, error: message }]);
     }
 
     isProcessing = false;
@@ -732,11 +742,41 @@ async function sendToAI(userMessage) {
     chatInput.focus();
 }
 
+// Runs one model exchange and, if a line-range action failed because the
+// model guessed a line number outside the file, automatically retries with
+// the real line count -- so a bad guess self-corrects instead of leaving
+// the user with a dead-end error message.
+async function runTurn(message, depth) {
+    const rawText = await callModel(message);
+    const parsed = parseModelJson(rawText);
+    const results = parsed.actions.length ? executeActions(parsed.actions) : null;
+    addChatMessage('ai', parsed.reply, results);
+
+    if (!results) return;
+
+    // Surface read-only results as hidden context so the next real message
+    // doesn't require re-reading the file.
+    const readOnly = results.every(r => r.type === 'readfile');
+    if (readOnly) {
+        const dump = results.filter(r => r.ok).map(r => `File "${r.filename}":\n${r.readContent}`).join('\n\n');
+        if (dump) { chatHistory.push({ role: 'user', content: dump, hidden: true }); saveChat(); }
+        return;
+    }
+
+    const rangeErrors = results.filter(r => !r.ok && /out of range/i.test(r.error || ''));
+    if (rangeErrors.length && depth < MAX_AUTO_RETRIES) {
+        const correction = rangeErrors.map(r => r.error).join(' ');
+        chatHistory.push({ role: 'user', content: `${correction} Please re-check the real line count and try again with a valid range.`, hidden: true });
+        saveChat();
+        await runTurn('Retry with the correct line range.', depth + 1);
+    }
+}
+
 chatSendBtn.addEventListener('click', () => sendToAI(chatInput.value));
 chatInput.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendToAI(chatInput.value); }
 });
-clearChatBtn.addEventListener('click', () => { if (confirm('Очистить историю чата?')) clearChat(); });
+clearChatBtn.addEventListener('click', () => { if (confirm('Clear chat history?')) clearChat(); });
 
 // ---------- init ----------
 files = storage.load('levino_files', null) || { 'main.py': 'print("Hello, World!")' };
@@ -749,9 +789,9 @@ const firstKey = Object.keys(files)[0];
 if (firstKey) openFile(firstKey);
 
 if (location.protocol === 'file:') {
-    addSystemMessage('Страница открыта как файл (file://) — запросы к API могут блокироваться браузером. ' +
-        'Если ассистент ответит ошибкой "Failed to fetch", запустите страницу через локальный сервер ' +
-        '("python3 -m http.server" в папке с файлом) и откройте её по http://localhost:....');
+    addSystemMessage('This page is open as a local file (file://) — API requests may be blocked by the browser. ' +
+        'If the assistant replies with a "Failed to fetch" error, serve this page through a local server ' +
+        '("python3 -m http.server" in this file\'s folder) and open it via http://localhost:... instead.');
 }
 })();
 </script>
