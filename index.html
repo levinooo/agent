@@ -67,20 +67,28 @@ body {
 .code-header .file-name { color: var(--text); font-size: 13px; font-family: var(--mono); }
 .code-header .save-hint { color: var(--text-faint); font-size: 11px; }
 
-.code-body { flex: 1; position: relative; overflow: hidden; }
-.code-highlight-layer {
-    position: absolute; inset: 0; padding: 16px; pointer-events: none;
+.code-body { flex: 1; position: relative; overflow: hidden; --gutter-w: 28px; }
+.line-gutter {
+    position: absolute; inset: 0; width: var(--gutter-w); padding: 16px 0; pointer-events: none;
     font-family: var(--mono); font-size: 14px; line-height: 1.8; white-space: pre;
-    overflow: hidden; z-index: 1;
+    overflow: hidden; z-index: 1; text-align: right; color: var(--text-faint);
+    background: var(--code-bg); border-right: 1px solid var(--border);
+}
+.line-gutter .ln-row { display: block; height: 1.8em; padding-right: 6px; user-select: none; font-size: 11px; }
+.code-highlight-layer {
+    position: absolute; inset: 0; padding: 16px 16px 16px var(--gutter-w); pointer-events: none;
+    font-family: var(--mono); font-size: 14px; line-height: 1.8; white-space: pre;
+    overflow: hidden; z-index: 2;
 }
 .code-highlight-layer .hl-row { display: block; height: 1.8em; border-radius: 0; }
 .code-highlight-layer .hl-row.hl-read   { background: rgba(231, 195, 90, 0.16); }
 .code-highlight-layer .hl-row.hl-add    { background: rgba(90, 210, 130, 0.16); }
 .code-highlight-layer .hl-row.hl-remove { background: rgba(255, 90, 90, 0.16); }
+.code-highlight-layer .hl-row.hl-cut    { box-shadow: inset 0 2px 0 0 rgba(255, 90, 90, 0.75); }
 
 #codeEditor {
-    position: relative; z-index: 2; width: 100%; height: 100%;
-    background: transparent; color: var(--text); border: none; padding: 16px;
+    position: relative; z-index: 3; width: 100%; height: 100%;
+    background: transparent; color: var(--text); border: none; padding: 16px 16px 16px var(--gutter-w);
     font-family: var(--mono); font-size: 14px; line-height: 1.8; outline: none;
     resize: none; tab-size: 4; white-space: pre; overflow: auto;
 }
@@ -140,12 +148,6 @@ body {
 .action-detail { color: #8a93a0; font-family: var(--mono); font-size: 11.5px; word-break: break-word; }
 .action-card.is-error .action-detail { color: #d99a9a; }
 .action-hint { color: #6f7a86; font-size: 10.5px; margin-top: 2px; }
-.action-diff {
-    margin-top: 4px; padding: 6px 8px; background: rgba(0,0,0,0.25); border-radius: 6px;
-    font-family: var(--mono); font-size: 11px; line-height: 1.5; overflow-x: auto;
-}
-.action-diff .diff-old { color: #ff8a8a; white-space: pre-wrap; word-break: break-word; }
-.action-diff .diff-new { color: #7ee2a0; white-space: pre-wrap; word-break: break-word; margin-top: 4px; }
 
 .chat-input-area { padding: 10px 16px; border-top: 1px solid var(--border); display: flex; gap: 8px; flex-shrink: 0; }
 .chat-input-area input {
@@ -201,6 +203,7 @@ body {
             <span class="save-hint" id="saveHint"></span>
         </div>
         <div class="code-body">
+            <div class="line-gutter" id="lineGutter"></div>
             <div class="code-highlight-layer" id="highlightLayer"></div>
             <textarea id="codeEditor" placeholder="Select a file to start editing..." spellcheck="false" disabled></textarea>
         </div>
@@ -247,6 +250,7 @@ const $ = id => document.getElementById(id);
 const fileListEl = $('fileList');
 const codeEditor = $('codeEditor');
 const highlightLayer = $('highlightLayer');
+const lineGutter = $('lineGutter');
 const currentFileName = $('currentFileName');
 const saveHint = $('saveHint');
 const chatMessages = $('chatMessages');
@@ -327,6 +331,15 @@ function renderFiles() {
 
 function clearHighlight() { highlightLayer.innerHTML = ''; }
 
+// Renders the 1..N line-number gutter for the currently loaded text.
+function renderLineNumbers() {
+    const lineCount = codeEditor.value.split('\n').length;
+    let html = '';
+    for (let i = 1; i <= lineCount; i++) html += `<span class="ln-row">${i}</span>`;
+    lineGutter.innerHTML = html;
+    lineGutter.scrollTop = codeEditor.scrollTop;
+}
+
 function openFile(name, highlight) {
     if (!files.hasOwnProperty(name)) return;
     currentFile = name;
@@ -335,6 +348,7 @@ function openFile(name, highlight) {
     currentFileName.textContent = name;
     saveHint.textContent = '';
     renderFiles();
+    renderLineNumbers();
     if (highlight) applyHighlight(highlight.kind, highlight.start, highlight.end);
     else clearHighlight();
 }
@@ -356,10 +370,12 @@ function applyHighlight(kind, start, end) {
     codeEditor.scrollTop = targetTop;
     highlightLayer.scrollTop = codeEditor.scrollTop;
     highlightLayer.scrollLeft = codeEditor.scrollLeft;
+    lineGutter.scrollTop = codeEditor.scrollTop;
 }
 codeEditor.addEventListener('scroll', () => {
     highlightLayer.scrollTop = codeEditor.scrollTop;
     highlightLayer.scrollLeft = codeEditor.scrollLeft;
+    lineGutter.scrollTop = codeEditor.scrollTop;
 });
 
 // ---------- file operations (single dispatch table, used by both the
@@ -384,20 +400,10 @@ function deleteFile(rawName) {
         codeEditor.value = ''; codeEditor.disabled = true;
         currentFileName.textContent = 'No file selected';
         clearHighlight();
+        lineGutter.innerHTML = '';
     }
     renderFiles();
     return { ok: true, name: real };
-}
-
-function deleteAllFiles() {
-    const count = Object.keys(files).length;
-    files = {};
-    currentFile = null;
-    codeEditor.value = ''; codeEditor.disabled = true;
-    currentFileName.textContent = 'No file selected';
-    clearHighlight();
-    saveFiles(); renderFiles();
-    return count;
 }
 
 function writeFile(rawName, content) {
@@ -405,7 +411,7 @@ function writeFile(rawName, content) {
     if (!real) return { ok: false, error: `File "${rawName}" not found` };
     files[real] = content;
     saveFiles();
-    if (currentFile === real) codeEditor.value = content;
+    if (currentFile === real) { codeEditor.value = content; renderLineNumbers(); }
     return { ok: true, name: real };
 }
 
@@ -441,7 +447,7 @@ function editLines(rawName, startLine, endLine, newContent) {
     lines.splice(start - 1, Math.max(0, deleteCount), ...replacement);
     files[real] = lines.join('\n');
     saveFiles();
-    if (currentFile === real) codeEditor.value = files[real];
+    if (currentFile === real) { codeEditor.value = files[real]; renderLineNumbers(); }
     return { ok: true, name: real, start, end: start + replacement.length - 1, oldContent: oldSlice, newContent: replacement.join('\n') };
 }
 
@@ -458,7 +464,7 @@ function deleteLines(rawName, startLine, endLine) {
     lines.splice(start - 1, end - start + 1);
     files[real] = lines.join('\n');
     saveFiles();
-    if (currentFile === real) codeEditor.value = files[real];
+    if (currentFile === real) { codeEditor.value = files[real]; renderLineNumbers(); }
     return { ok: true, name: real, removedContent: removed };
 }
 
@@ -467,6 +473,7 @@ codeEditor.addEventListener('input', () => {
     if (!currentFile) return;
     files[currentFile] = codeEditor.value;
     clearHighlight();
+    renderLineNumbers();
     saveHint.textContent = 'Saving…';
     clearTimeout(codeEditor._t);
     codeEditor._t = setTimeout(() => {
@@ -487,7 +494,6 @@ addFileBtn.addEventListener('click', () => {
 const ACTION_META = {
     createfile:  { label: 'File created',    icon: '+', hl: 'add' },
     deletefile:  { label: 'File deleted',    icon: '✕', hl: null },
-    deleteall:   { label: 'All files deleted', icon: '✕', hl: null },
     writefile:   { label: 'File rewritten',  icon: '✎', hl: 'add' },
     editlines:   { label: 'Lines edited',    icon: '✎', hl: 'add' },
     deletelines: { label: 'Lines deleted',   icon: '✕', hl: 'remove' },
@@ -503,23 +509,8 @@ function buildActionCardHtml(action, idx) {
     const icon = isError ? ACTION_META.error.icon : meta.icon;
     const detail = isError ? (action.error || 'Unknown error') : (action.detail || '');
     const clickable = !isError && meta.hl && action.filename;
-    const hint = clickable ? '<span class="action-hint">Click to view in code</span>' : '';
-
-    let diffHtml = '';
-    if (!isError) {
-        if (action.type === 'editlines' && (action.oldContent || action.newContent)) {
-            diffHtml = `
-                <div class="action-diff">
-                    ${action.oldContent ? `<div class="diff-old">− ${escapeHtml(action.oldContent).replace(/\n/g, '<br>− ')}</div>` : ''}
-                    ${action.newContent ? `<div class="diff-new">+ ${escapeHtml(action.newContent).replace(/\n/g, '<br>+ ')}</div>` : ''}
-                </div>`;
-        } else if (action.type === 'deletelines' && action.removedContent) {
-            diffHtml = `
-                <div class="action-diff">
-                    <div class="diff-old">− ${escapeHtml(action.removedContent).replace(/\n/g, '<br>− ')}</div>
-                </div>`;
-        }
-    }
+    const hintText = action.type === 'deletelines' ? 'Click to view where this was' : 'Click to view in code';
+    const hint = clickable ? `<span class="action-hint">${hintText}</span>` : '';
 
     return `
         <div class="action-card${isError ? ' is-error' : ''}${clickable ? ' is-clickable' : ''}" data-action-idx="${idx}">
@@ -527,7 +518,6 @@ function buildActionCardHtml(action, idx) {
             <span class="action-body">
                 <span class="action-title">${escapeHtml(title)}</span>
                 <span class="action-detail">${escapeHtml(detail)}</span>
-                ${diffHtml}
                 ${hint}
             </span>
         </div>
@@ -548,7 +538,18 @@ function renderChatMessageEl(msg) {
                 const meta = ACTION_META[action.type];
                 if (!meta?.hl || !action.filename) return;
                 if (currentFile !== action.filename) openFile(action.filename);
-                applyHighlight(meta.hl, action.start || 1, action.end || action.start || 1);
+                if (action.type === 'deletelines') {
+                    // The deleted lines no longer exist in the (now shorter)
+                    // file, so highlighting that old range would land on
+                    // unrelated, currently-different lines. Instead mark the
+                    // cut point: the line now sitting where the deletion
+                    // happened, with a thin top border instead of a fill.
+                    const lineCount = codeEditor.value.split('\n').length;
+                    const cutLine = Math.min(Math.max(1, action.start || 1), lineCount);
+                    applyHighlight('cut', cutLine, cutLine);
+                } else {
+                    applyHighlight(meta.hl, action.start || 1, action.end || action.start || 1);
+                }
             });
         });
         div.appendChild(list);
@@ -627,7 +628,6 @@ const HANDLERS = {
         const r = deleteFile(a.filename);
         return { ok: r.ok, detail: r.ok ? `"${r.name}"` : null, error: r.error };
     },
-    deleteall: () => ({ ok: true, detail: `Deleted ${deleteAllFiles()} file(s)` }),
     writefile: a => {
         const r = writeFile(a.filename, a.content || '');
         return { ok: r.ok, detail: r.ok ? `"${r.name}"` : null, error: r.error,
@@ -683,7 +683,6 @@ Respond with a single JSON object and NOTHING else (no markdown fences, no text 
 Allowed action objects:
 {"type": "createfile", "filename": "name.ext", "content": "optional initial content"}
 {"type": "deletefile", "filename": "name.ext"}
-{"type": "deleteall"}
 {"type": "writefile", "filename": "name.ext", "content": "full new file content"}
 {"type": "editlines", "filename": "name.ext", "start_line": 3, "end_line": 3, "content": "new text for those lines"}
 {"type": "deletelines", "filename": "name.ext", "start_line": 3, "end_line": 5}
@@ -700,6 +699,7 @@ Rules:
 - IMPORTANT: if the user asks you to find/locate/look at something (e.g. a function, a block, a keyword) without giving you exact line numbers, and the file has more than ~25 lines, you do NOT know which lines it's on yet. In that case you MUST call readfile with NO start_line/end_line (read the ENTIRE file) so you can actually find it. Do NOT guess a small range like lines 1-20 -- that only shows you the top of the file and you will miss the target and fail the task.
 - "reply" is always in the user's language.
 - Only include actions the user actually asked for; return "actions": [] if none.
+- There is no "delete all files" action. If the user asks to delete all/every file, include one "deletefile" action per existing file (one per filename from the CURRENT FILES list above).
 - Never invent filenames the user didn't give and that don't already exist, unless they're asking to create a new file.
 
 Prefer surgical edits over full rewrites:
@@ -812,8 +812,12 @@ async function runTurn(message, depth, originalRequest) {
         const dump = results.filter(r => r.ok).map(r => `File "${r.filename}":\n${r.readContent}`).join('\n\n');
         if (dump) { chatHistory.push({ role: 'user', content: dump, hidden: true }); saveChat(); }
 
-        const viewOnlyPattern = /^(прочитай|почитай|покажи|посмотри|глянь|read|show|view|look at|open)\b/i;
-        const looksViewOnly = viewOnlyPattern.test(userAsk.trim()) && !/(удали|измени|исправь|поменяй|добавь|перепиши|сделай|fix|change|edit|delete|remove|replace|update|add|rewrite)/i.test(userAsk);
+        // Default assumption: if the user's message contains ANY edit verb
+        // anywhere (not just at the start), the read was a stepping stone
+        // and we must continue with the edit automatically. Only skip the
+        // auto-continue when the message has edit intent nowhere in it.
+        const editIntentPattern = /(удали|убери|измени|исправь|поменяй|добавь|перепиши|сделай|замени|почини|fix|change|edit|delete|remove|replace|update|add|rewrite|modify)/i;
+        const looksViewOnly = !editIntentPattern.test(userAsk);
 
         if (!looksViewOnly && depth < MAX_AUTO_RETRIES) {
             chatHistory.push({ role: 'user', content: `Вот содержимое файла, которое ты только что прочитал. Теперь выполни исходную просьбу пользователя: "${userAsk}". Добавь нужные editlines/deletelines/writefile действия в этом ответе -- не читай файл повторно.`, hidden: true });
