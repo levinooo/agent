@@ -73,7 +73,7 @@ body {
     font-family: var(--mono); font-size: 14px; line-height: 1.8; white-space: pre;
     overflow: hidden; z-index: 1;
 }
-.code-highlight-layer .hl-row { display: block; height: 1.8em; border-radius: 3px; }
+.code-highlight-layer .hl-row { display: block; height: 1.8em; border-radius: 0; }
 .code-highlight-layer .hl-row.hl-read   { background: rgba(231, 195, 90, 0.16); }
 .code-highlight-layer .hl-row.hl-add    { background: rgba(90, 210, 130, 0.16); }
 .code-highlight-layer .hl-row.hl-remove { background: rgba(255, 90, 90, 0.16); }
@@ -749,7 +749,11 @@ async function sendToAI(userMessage) {
 // model guessed a line number outside the file, automatically retries with
 // the real line count -- so a bad guess self-corrects instead of leaving
 // the user with a dead-end error message.
-async function runTurn(message, depth) {
+async function runTurn(message, depth, originalRequest) {
+    // originalRequest is the user's actual ask, kept stable across an
+    // auto-continued chain (read -> edit) so the follow-up prompt still
+    // carries the real intent instead of a generic "continue" message.
+    const userAsk = originalRequest || message;
     const rawText = await callModel(message);
     const parsed = parseModelJson(rawText);
     const results = parsed.actions.length ? executeActions(parsed.actions) : null;
@@ -757,12 +761,27 @@ async function runTurn(message, depth) {
 
     if (!results) return;
 
-    // Surface read-only results as hidden context so the next real message
-    // doesn't require re-reading the file.
+    // If this turn was read-only, decide whether the model still owes the
+    // user an edit. A readfile is "final" only when the user's original
+    // message was itself just a request to view/explain something; any
+    // other request (fix/change/delete/add/etc.) means the read was meant
+    // to be a stepping stone, and the model failing to also act on it in
+    // the same turn is the model dropping the ball -- so we continue the
+    // turn automatically with the file content now available, instead of
+    // leaving the user with a dead-end "I'll read it" message.
     const readOnly = results.every(r => r.type === 'readfile');
     if (readOnly) {
         const dump = results.filter(r => r.ok).map(r => `File "${r.filename}":\n${r.readContent}`).join('\n\n');
         if (dump) { chatHistory.push({ role: 'user', content: dump, hidden: true }); saveChat(); }
+
+        const viewOnlyPattern = /^(прочитай|почитай|покажи|посмотри|глянь|read|show|view|look at|open)\b/i;
+        const looksViewOnly = viewOnlyPattern.test(userAsk.trim()) && !/(удали|измени|исправь|поменяй|добавь|перепиши|сделай|fix|change|edit|delete|remove|replace|update|add|rewrite)/i.test(userAsk);
+
+        if (!looksViewOnly && depth < MAX_AUTO_RETRIES) {
+            chatHistory.push({ role: 'user', content: `Вот содержимое файла, которое ты только что прочитал. Теперь выполни исходную просьбу пользователя: "${userAsk}". Добавь нужные editlines/deletelines/writefile действия в этом ответе -- не читай файл повторно.`, hidden: true });
+            saveChat();
+            await runTurn('Продолжи и внеси изменение на основе прочитанного содержимого.', depth + 1, userAsk);
+        }
         return;
     }
 
@@ -771,7 +790,7 @@ async function runTurn(message, depth) {
         const correction = rangeErrors.map(r => r.error).join(' ');
         chatHistory.push({ role: 'user', content: `${correction} Please re-check the real line count and try again with a valid range.`, hidden: true });
         saveChat();
-        await runTurn('Retry with the correct line range.', depth + 1);
+        await runTurn('Retry with the correct line range.', depth + 1, userAsk);
     }
 }
 
