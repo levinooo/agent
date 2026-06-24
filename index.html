@@ -36,7 +36,7 @@ body {
 .main { display: flex; flex: 1; overflow: hidden; }
 
 .file-panel {
-    width: 200px; background: var(--panel); border-right: 1px solid var(--border);
+    width: 340px; background: var(--panel); border-right: 1px solid var(--border);
     padding: 12px; overflow-y: auto; flex-shrink: 0;
 }
 .panel-title {
@@ -48,20 +48,6 @@ body {
 .panel-title .add-btn:hover { color: var(--accent-soft); }
 .file-panel.drag-over { background: #1a2230; box-shadow: inset 0 0 0 2px rgba(199,177,143,0.4); }
 
-.ctx-menu {
-    display: none; position: fixed; z-index: 1000;
-    background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
-    padding: 4px; min-width: 150px; box-shadow: 0 8px 24px rgba(0,0,0,0.45);
-    font-size: 13px;
-}
-.ctx-menu.open { display: block; }
-.ctx-item {
-    padding: 7px 12px; border-radius: 5px; color: var(--text); cursor: pointer;
-    white-space: nowrap; user-select: none;
-}
-.ctx-item:hover { background: #1f2833; }
-.ctx-item.danger:hover { background: rgba(255,71,87,0.12); color: var(--danger); }
-.ctx-sep { height: 1px; background: var(--border); margin: 4px 2px; }
 .file-item {
     padding: 8px 10px; border-radius: 6px; color: #a0b0c0; font-size: 13px; cursor: pointer;
     transition: 0.15s; font-family: var(--mono); user-select: none;
@@ -69,23 +55,36 @@ body {
 }
 .file-item .fname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .file-item:hover { background: #1f2833; }
+.file-item:hover .file-delete-btn { opacity: 1; }
 .file-item.active {
     background: #2b2519; color: var(--accent-soft);
     box-shadow: inset 0 0 0 1px rgba(199,177,143,0.35);
 }
+.file-delete-btn {
+    flex-shrink: 0; opacity: 0; transition: 0.15s; color: var(--text-faint);
+    width: 16px; height: 16px; border-radius: 4px; display: flex; align-items: center; justify-content: center;
+    font-size: 12px; line-height: 1;
+}
+.file-delete-btn:hover { color: var(--danger); background: rgba(255,71,87,0.12); }
 
 .folder-item {
     padding: 7px 10px; border-radius: 6px; color: #8a9aaa; font-size: 13px; cursor: pointer;
-    transition: 0.15s; font-family: var(--mono); user-select: none;
+    font-family: var(--mono); user-select: none;
     display: flex; align-items: center; gap: 5px;
 }
 .folder-item:hover { background: #1f2833; }
-.folder-item .folder-caret { font-size: 10px; width: 10px; flex-shrink: 0; transition: transform 0.15s; color: var(--text-faint); }
-.folder-item.expanded .folder-caret { transform: rotate(90deg); }
-.folder-item .folder-icon { flex-shrink: 0; opacity: 0.8; }
+.folder-item .folder-caret {
+    flex-shrink: 0; width: 14px; height: 14px; display: flex; align-items: center; justify-content: center;
+    color: var(--text-dim);
+    margin-left: auto;
+}
+.folder-item .folder-caret svg { width: 10px; height: 10px; display: block; }
+.folder-item.expanded .folder-caret { transform: rotate(180deg); }
+.folder-item:hover .folder-caret { color: var(--accent); }
 .folder-item .fname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tree-children { overflow: hidden; }
 .tree-children.collapsed { display: none; }
+.tree-children > .tree-children-inner { overflow: hidden; }
 
 .code-panel { flex: 1; background: var(--code-bg); display: flex; flex-direction: column; min-width: 0; }
 .code-header {
@@ -93,13 +92,21 @@ body {
     display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;
 }
 .code-header .file-name { color: var(--text); font-size: 13px; font-family: var(--mono); }
-.code-header .save-hint { color: var(--text-faint); font-size: 11px; }
+.save-btn {
+    background: transparent; border: 1px solid #3a4550; color: var(--text-dim);
+    padding: 4px 14px; border-radius: 14px; cursor: pointer; font-size: 12px; font-weight: 600;
+    transition: 0.15s; font-family: inherit;
+}
+.save-btn.dirty { background: var(--accent); border-color: var(--accent); color: #14181e; }
+.save-btn.dirty:hover { background: #d9c5a8; }
+.save-btn:disabled { opacity: 0.45; cursor: default; }
 
-.code-body { flex: 1; position: relative; overflow: hidden; --gutter-w: 38px; }
+.code-body { flex: 1; position: relative; overflow: hidden; --gutter-w: 38px; background: var(--code-bg); }
 .line-gutter {
     position: absolute; inset: 0; width: var(--gutter-w); padding: 16px 0; pointer-events: none;
     font-family: var(--mono); font-size: 14px; line-height: 1.8; white-space: pre;
     overflow: hidden; z-index: 1; text-align: right; color: var(--text-faint);
+    background: var(--code-bg);
 }
 .line-gutter .ln-row { display: block; height: 1.8em; padding-right: 14px; user-select: none; }
 .code-highlight-layer {
@@ -115,7 +122,8 @@ body {
 
 #codeEditor {
     position: relative; z-index: 3; width: 100%; height: 100%;
-    background: transparent; color: var(--text); border: none; padding: 16px 16px 16px var(--gutter-w);
+    background: transparent;
+    color: var(--text); border: none; padding: 16px 16px 16px var(--gutter-w);
     font-family: var(--mono); font-size: 14px; line-height: 1.8; outline: none;
     resize: none; tab-size: 4; white-space: pre; overflow: auto;
 }
@@ -132,12 +140,44 @@ body {
 }
 .chat-header .title { color: var(--text); font-size: 14px; font-weight: 500; }
 .chat-header .actions { display: flex; gap: 8px; align-items: center; }
-.chat-header .model-badge {
-    font-size: 11px; color: var(--text-dim); background: #1f2833; padding: 2px 10px; border-radius: 12px;
+.model-picker { position: relative; }
+.model-picker-btn {
+    display: flex; align-items: center; gap: 6px;
+    background: transparent; border: 1px solid #3a4550; color: var(--text-dim);
+    padding: 2px 10px; border-radius: 12px; cursor: pointer; font-size: 11px; font-family: inherit;
+    transition: 0.15s; max-width: 150px;
 }
+.model-picker-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.model-picker-btn:hover { border-color: var(--accent); color: var(--text); }
+.model-picker-btn svg { flex-shrink: 0; color: var(--text-faint); }
+.model-picker.open .model-picker-btn svg { transform: rotate(180deg); }
+.model-picker-menu {
+    display: none; position: absolute; top: calc(100% + 6px); right: 0; min-width: 200px; z-index: 50;
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; padding: 4px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+}
+.model-picker.open .model-picker-menu {
+    display: block; max-height: 168px; overflow-y: auto;
+    scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+}
+.model-picker-menu::-webkit-scrollbar { width: 6px; }
+.model-picker-menu::-webkit-scrollbar-track { background: transparent; }
+.model-picker-menu::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+.model-picker-menu::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
+.model-picker-group-label {
+    color: var(--text-faint); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;
+    padding: 7px 10px 4px;
+}
+.model-picker-group-label:first-child { padding-top: 4px; }
+.model-picker-item {
+    padding: 7px 10px; border-radius: 5px; color: var(--text-dim); font-size: 12px; cursor: pointer;
+    white-space: nowrap; user-select: none;
+}
+.model-picker-item:hover { background: #1f2833; color: var(--text); }
+.model-picker-item.selected { color: var(--accent-soft); }
 .chat-header .clear-btn {
     background: transparent; border: 1px solid #3a4550; color: var(--text-dim);
-    padding: 2px 10px; border-radius: 12px; cursor: pointer; font-size: 11px; transition: 0.15s;
+    padding: 2px 10px; border-radius: 12px; cursor: pointer; font-size: 11px;
 }
 .chat-header .clear-btn:hover { border-color: var(--danger); color: var(--danger); }
 
@@ -197,7 +237,7 @@ body {
 .file-panel::-webkit-scrollbar-thumb, .chat-messages::-webkit-scrollbar-thumb, #codeEditor::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 
 @media (max-width: 768px) {
-    .file-panel { width: 160px; }
+    .file-panel { width: 240px; }
     .chat-panel { width: 240px; }
 }
 @media (max-width: 600px) {
@@ -212,7 +252,7 @@ body {
 
 <div class="header">
     <h1>Levino Flash</h1>
-    <span class="status">● AI Code Editor</span>
+    <span class="status">AI Code Editor</span>
 </div>
 
 <div class="main">
@@ -220,7 +260,8 @@ body {
         <div class="panel-title">
             <span>Files</span>
             <span class="title-actions">
-                <span class="add-btn" id="importBtn" title="Import files or folders (or drag &amp; drop them here)">⇪</span>
+                <span class="add-btn" id="importFileBtn" title="Import file(s)">⇪</span>
+                <span class="add-btn" id="importFolderBtn" title="Import folder">⇫</span>
                 <span class="add-btn" id="addFileBtn" title="New file">+</span>
             </span>
         </div>
@@ -232,7 +273,7 @@ body {
     <div class="code-panel">
         <div class="code-header">
             <span class="file-name" id="currentFileName">No file selected</span>
-            <span class="save-hint" id="saveHint"></span>
+            <button class="save-btn" id="saveBtn" disabled>Save</button>
         </div>
         <div class="code-body">
             <div class="line-gutter" id="lineGutter"></div>
@@ -245,7 +286,34 @@ body {
         <div class="chat-header">
             <span class="title">AI Assistant</span>
             <div class="actions">
-                <span class="model-badge">GPT-OSS 120B</span>
+                <div class="model-picker" id="modelPicker">
+                    <button type="button" class="model-picker-btn" id="modelPickerBtn">
+                        <span id="modelPickerLabel">GPT-OSS 120B</span>
+                        <svg viewBox="0 0 8 8" width="8" height="8"><path d="M1 2.5L4 5.5L7 2.5" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                    <div class="model-picker-menu" id="modelPickerMenu">
+                        <div class="model-picker-group-label">Cerebras</div>
+                        <div class="model-picker-item" data-model="gpt-oss-120b">GPT-OSS 120B</div>
+                        <div class="model-picker-item" data-model="llama-3.3-70b">Llama 3.3 70B</div>
+                        <div class="model-picker-group-label">Gemini</div>
+                        <div class="model-picker-item" data-model="gemini-3.5-flash">Gemini 3.5 Flash</div>
+                        <div class="model-picker-item" data-model="gemini-3-flash">Gemini 3 Flash</div>
+                        <div class="model-picker-item" data-model="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</div>
+                        <div class="model-picker-item" data-model="gemini-2.5-flash">Gemini 2.5 Flash</div>
+                        <div class="model-picker-item" data-model="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite</div>
+                        <div class="model-picker-group-label">Groq</div>
+                        <div class="model-picker-item" data-model="groq-compound">Compound</div>
+                        <div class="model-picker-item" data-model="groq-compound-mini">Compound Mini</div>
+                        <div class="model-picker-item" data-model="groq-llama-3.1-8b">Llama 3.1 8B Instant</div>
+                        <div class="model-picker-item" data-model="groq-llama-3.3-70b">Llama 3.3 70B Versatile</div>
+                        <div class="model-picker-item" data-model="groq-llama-4-scout">Llama 4 Scout 17B</div>
+                        <div class="model-picker-item" data-model="groq-gpt-oss-120b">GPT-OSS 120B</div>
+                        <div class="model-picker-item" data-model="groq-gpt-oss-20b">GPT-OSS 20B</div>
+                        <div class="model-picker-item" data-model="groq-gpt-oss-safeguard-20b">GPT-OSS Safeguard 20B</div>
+                        <div class="model-picker-item" data-model="groq-qwen3-32b">Qwen3 32B</div>
+                        <div class="model-picker-item" data-model="groq-qwen3.6-27b">Qwen3.6 27B</div>
+                    </div>
+                </div>
                 <button class="clear-btn" id="clearChatBtn">✕ Clear</button>
             </div>
         </div>
@@ -259,8 +327,6 @@ body {
     </div>
 </div>
 
-<div class="ctx-menu" id="ctxMenu"></div>
-
 <script>
 (function () {
 'use strict';
@@ -268,11 +334,45 @@ body {
 // Personal API key, hardcoded by request. If this file is ever shared or
 // published, anyone viewing the page source can see it -- revoke/rotate it
 // at cloud.cerebras.ai if that happens.
-const API_KEY = 'csk-hp4npdrd94y6v4v8c494mnx4vd6wh9hcmn8tpjr8xwrp64d6';
-const API_URL = 'https://api.cerebras.ai/v1/chat/completions';
-const MODEL = 'gpt-oss-120b';
+const CEREBRAS_API_KEY = 'csk-hp4npdrd94y6v4v8c494mnx4vd6wh9hcmn8tpjr8xwrp64d6';
+const CEREBRAS_API_URL = 'https://api.cerebras.ai/v1/chat/completions';
+
+// Gemini key. This is a static HTML file -- if you ever move this off your
+// local machine (host it, share it, push it to a public repo) the key is
+// plain text in the page source for anyone to grab. Fine for local use.
+const GEMINI_API_KEY = 'AQ.Ab8RN6IWCdajNkohTjzchBYEJQlJFuqM9mnUfKtjLTKRsjbLxA';
+const GEMINI_INTERACTIONS_URL = 'https://generativelanguage.googleapis.com/v1beta/interactions';
+
+// Groq key -- same static-file caveat as above.
+const GROQ_API_KEY = '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';
+const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+
+let MODEL = 'gpt-oss-120b';
 const COOLDOWN_SECONDS = 5;
 const MAX_HISTORY_MESSAGES = 10;
+
+// Which provider each model id belongs to, and how its display label reads.
+// apiModel is only needed when the dropdown id doesn't match the literal
+// string the provider's API expects.
+const MODEL_INFO = {
+    'gpt-oss-120b':        { provider: 'cerebras', label: 'GPT-OSS 120B' },
+    'llama-3.3-70b':       { provider: 'cerebras', label: 'Llama 3.3 70B' },
+    'gemini-3.5-flash':    { provider: 'gemini',   label: 'Gemini 3.5 Flash' },
+    'gemini-3-flash':      { provider: 'gemini',   label: 'Gemini 3 Flash',  apiModel: 'gemini-3-flash-preview' },
+    'gemini-3.1-flash-lite': { provider: 'gemini', label: 'Gemini 3.1 Flash Lite' },
+    'gemini-2.5-flash':    { provider: 'gemini',   label: 'Gemini 2.5 Flash' },
+    'gemini-2.5-flash-lite': { provider: 'gemini', label: 'Gemini 2.5 Flash Lite' },
+    'groq-compound':              { provider: 'groq', label: 'Compound',                apiModel: 'groq/compound' },
+    'groq-compound-mini':         { provider: 'groq', label: 'Compound Mini',           apiModel: 'groq/compound-mini' },
+    'groq-llama-3.1-8b':          { provider: 'groq', label: 'Llama 3.1 8B Instant',    apiModel: 'llama-3.1-8b-instant' },
+    'groq-llama-3.3-70b':         { provider: 'groq', label: 'Llama 3.3 70B Versatile', apiModel: 'llama-3.3-70b-versatile' },
+    'groq-llama-4-scout':         { provider: 'groq', label: 'Llama 4 Scout 17B',       apiModel: 'meta-llama/llama-4-scout-17b-16e-instruct' },
+    'groq-gpt-oss-120b':          { provider: 'groq', label: 'GPT-OSS 120B',            apiModel: 'openai/gpt-oss-120b' },
+    'groq-gpt-oss-20b':           { provider: 'groq', label: 'GPT-OSS 20B',             apiModel: 'openai/gpt-oss-20b' },
+    'groq-gpt-oss-safeguard-20b': { provider: 'groq', label: 'GPT-OSS Safeguard 20B',   apiModel: 'openai/gpt-oss-safeguard-20b' },
+    'groq-qwen3-32b':             { provider: 'groq', label: 'Qwen3 32B',               apiModel: 'qwen/qwen3-32b' },
+    'groq-qwen3.6-27b':           { provider: 'groq', label: 'Qwen3.6 27B',             apiModel: 'qwen/qwen3.6-27b' }
+};
 
 let files = {};
 let currentFile = null;
@@ -294,17 +394,21 @@ const codeEditor = $('codeEditor');
 const highlightLayer = $('highlightLayer');
 const lineGutter = $('lineGutter');
 const currentFileName = $('currentFileName');
-const saveHint = $('saveHint');
+const saveBtn = $('saveBtn');
 const chatMessages = $('chatMessages');
 const chatInput = $('chatInput');
 const chatSendBtn = $('chatSendBtn');
 const clearChatBtn = $('clearChatBtn');
+const modelPicker = $('modelPicker');
+const modelPickerBtn = $('modelPickerBtn');
+const modelPickerLabel = $('modelPickerLabel');
+const modelPickerMenu = $('modelPickerMenu');
 const addFileBtn = $('addFileBtn');
 const filePanel = $('filePanel');
-const importBtn = $('importBtn');
+const importFileBtn = $('importFileBtn');
+const importFolderBtn = $('importFolderBtn');
 const importFileInput = $('importFileInput');
 const importFolderInput = $('importFolderInput');
-const ctxMenu = $('ctxMenu');
 
 // ---------- persistence ----------
 const storage = {
@@ -392,35 +496,35 @@ function renderTreeLevel(node, container, depth) {
 
         const caret = document.createElement('span');
         caret.className = 'folder-caret';
-        caret.textContent = '▸';
-
-        const icon = document.createElement('span');
-        icon.className = 'folder-icon';
-        icon.textContent = isExpanded ? '📂' : '📁';
+        caret.innerHTML = '<svg viewBox="0 0 10 6" fill="none"><path d="M1 1L5 5L9 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
         const fname = document.createElement('span');
         fname.className = 'fname';
         fname.textContent = folderName;
         fname.title = child.fullPath;
 
-        folderEl.append(caret, icon, fname);
+        folderEl.append(fname, caret);
 
+        // Wrapper handles the height animation; inner holds the actual
+        // rendered rows. Children are always rendered (even when collapsed)
+        // so the very first expand-click animates against real, already-
+        // measured content instead of an empty box that pops to full size
+        // a frame later.
         const childContainer = document.createElement('div');
         childContainer.className = 'tree-children' + (isExpanded ? '' : ' collapsed');
+        const childInner = document.createElement('div');
+        childInner.className = 'tree-children-inner';
+        childContainer.appendChild(childInner);
 
         folderEl.addEventListener('click', () => {
             if (expandedFolders.has(child.fullPath)) expandedFolders.delete(child.fullPath);
             else expandedFolders.add(child.fullPath);
             renderFiles();
         });
-        folderEl.addEventListener('contextmenu', e => {
-            e.preventDefault();
-            openFolderContextMenu(e.clientX, e.clientY, child.fullPath);
-        });
 
         container.appendChild(folderEl);
         container.appendChild(childContainer);
-        if (isExpanded) renderTreeLevel(child, childContainer, depth + 1);
+        if (isExpanded) renderTreeLevel(child, childInner, depth + 1);
     }
 
     const fileNames = node.files.slice().sort((a, b) => a.localeCompare(b));
@@ -435,12 +539,17 @@ function renderTreeLevel(node, container, depth) {
         fname.textContent = baseName;
         fname.title = path;
 
-        item.append(fname);
-        item.addEventListener('click', () => openFile(path));
-        item.addEventListener('contextmenu', e => {
-            e.preventDefault();
-            openFileContextMenu(e.clientX, e.clientY, path);
+        const delBtn = document.createElement('span');
+        delBtn.className = 'file-delete-btn';
+        delBtn.textContent = '✕';
+        delBtn.title = 'Delete file';
+        delBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            if (confirm(`Delete file "${path}"?`)) deleteFile(path);
         });
+
+        item.append(fname, delBtn);
+        item.addEventListener('click', () => openFile(path));
         container.appendChild(item);
     }
 }
@@ -462,7 +571,9 @@ function openFile(name, highlight) {
     codeEditor.value = files[name] || '';
     codeEditor.disabled = false;
     currentFileName.textContent = name;
-    saveHint.textContent = '';
+    saveBtn.classList.remove('dirty');
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Save';
     renderFiles();
     renderLineNumbers();
     if (highlight) applyHighlight(highlight.kind, highlight.start, highlight.end);
@@ -635,13 +746,18 @@ codeEditor.addEventListener('input', () => {
     files[currentFile] = codeEditor.value;
     clearHighlight();
     renderLineNumbers();
-    saveHint.textContent = 'Saving…';
-    clearTimeout(codeEditor._t);
-    codeEditor._t = setTimeout(() => {
-        saveFiles();
-        saveHint.textContent = 'Saved';
-        setTimeout(() => { saveHint.textContent = ''; }, 1200);
-    }, 400);
+    saveBtn.classList.add('dirty');
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'Save';
+});
+
+saveBtn.addEventListener('click', () => {
+    if (!currentFile || saveBtn.disabled) return;
+    saveFiles();
+    saveBtn.classList.remove('dirty');
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saved';
+    setTimeout(() => { if (!saveBtn.classList.contains('dirty')) saveBtn.textContent = 'Save'; }, 1200);
 });
 
 addFileBtn.addEventListener('click', () => {
@@ -651,22 +767,18 @@ addFileBtn.addEventListener('click', () => {
 });
 
 // ---------- import from computer ----------
-// One button = plain multi-file picker (browsers don't allow a single
-// native dialog to pick both loose files AND folders at once -- that's an
-// OS-level limitation, not something we can work around with one input).
+// Two separate buttons: one for picking loose files, one for picking a
+// whole folder -- both available directly, no right-click menu needed.
 // Drag & drop covers the "any combination, folders included" case: dropping
 // a mix of loose files and whole folders onto the panel imports all of it,
 // folders and all, in one go.
-importBtn.addEventListener('click', () => {
+importFileBtn.addEventListener('click', () => {
     importFileInput.value = '';
     importFileInput.click();
 });
-importBtn.addEventListener('contextmenu', e => {
-    e.preventDefault();
-    showCtxMenu(e.clientX, e.clientY, [
-        { label: 'Import file(s)', action: () => { importFileInput.value = ''; importFileInput.click(); } },
-        { label: 'Import folder', action: () => { importFolderInput.value = ''; importFolderInput.click(); } }
-    ]);
+importFolderBtn.addEventListener('click', () => {
+    importFolderInput.value = '';
+    importFolderInput.click();
 });
 
 // Extensions we won't try to load as text -- importing these would just
@@ -831,13 +943,20 @@ function renderChatMessageEl(msg) {
     const div = document.createElement('div');
     div.className = `chat-msg ${msg.role}`;
 
-    if (msg.role === 'ai' && msg.actions?.length) {
+    // If every action in this message failed, the action cards already
+    // show the error text -- showing the same text again as the trailing
+    // reply line underneath was a duplicate. Only print the AI's reply
+    // text when it actually adds something beyond the cards themselves.
+    const actions = msg.actions || [];
+    const allFailed = actions.length > 0 && actions.every(a => !a.ok);
+
+    if (msg.role === 'ai' && actions.length) {
         const list = document.createElement('div');
         list.className = 'action-list';
-        list.innerHTML = msg.actions.map((a, i) => buildActionCardHtml(a, i)).join('');
+        list.innerHTML = actions.map((a, i) => buildActionCardHtml(a, i)).join('');
         list.querySelectorAll('.action-card.is-clickable').forEach(card => {
             card.addEventListener('click', () => {
-                const action = msg.actions[+card.dataset.actionIdx];
+                const action = actions[+card.dataset.actionIdx];
                 const meta = ACTION_META[action.type];
                 if (!meta?.hl || !action.filename) return;
                 if (currentFile !== action.filename) openFile(action.filename);
@@ -857,10 +976,12 @@ function renderChatMessageEl(msg) {
         });
         div.appendChild(list);
 
-        const replyEl = document.createElement('div');
-        replyEl.style.marginTop = '8px';
-        replyEl.textContent = msg.content || 'Done';
-        div.appendChild(replyEl);
+        if (!allFailed) {
+            const replyEl = document.createElement('div');
+            replyEl.style.marginTop = '8px';
+            replyEl.textContent = msg.content || 'Done';
+            div.appendChild(replyEl);
+        }
     } else {
         div.textContent = msg.content; // never innerHTML for raw model text
     }
@@ -896,45 +1017,6 @@ function renderChatHistory() {
 
 function clearChat() { chatHistory = []; saveChat(); renderChatHistory(); }
 
-// ---------- context menu ----------
-// Generic: items = [{ label, action, danger? }] or null for a separator.
-function showCtxMenu(x, y, items) {
-    ctxMenu.innerHTML = '';
-    items.forEach(item => {
-        if (item === null) {
-            const sep = document.createElement('div');
-            sep.className = 'ctx-sep';
-            ctxMenu.appendChild(sep);
-            return;
-        }
-        const el = document.createElement('div');
-        el.className = 'ctx-item' + (item.danger ? ' danger' : '');
-        el.textContent = item.label;
-        el.addEventListener('click', () => {
-            closeCtxMenu();
-            item.action();
-        });
-        ctxMenu.appendChild(el);
-    });
-
-    // Position, then nudge back on-screen if it would overflow the viewport.
-    ctxMenu.style.left = x + 'px';
-    ctxMenu.style.top = y + 'px';
-    ctxMenu.classList.add('open');
-    const rect = ctxMenu.getBoundingClientRect();
-    if (rect.right > window.innerWidth) ctxMenu.style.left = Math.max(4, window.innerWidth - rect.width - 4) + 'px';
-    if (rect.bottom > window.innerHeight) ctxMenu.style.top = Math.max(4, window.innerHeight - rect.height - 4) + 'px';
-}
-function closeCtxMenu() { ctxMenu.classList.remove('open'); }
-document.addEventListener('click', closeCtxMenu);
-document.addEventListener('contextmenu', e => {
-    // Clicking elsewhere with the right mouse button (outside a handled
-    // target) should also dismiss any menu already open, not stack a new
-    // browser-native menu on top of ours.
-    if (!e.defaultPrevented) closeCtxMenu();
-});
-window.addEventListener('blur', closeCtxMenu);
-
 function promptRename(path) {
     const baseName = path.split('/').pop();
     const folderPrefix = path.slice(0, path.length - baseName.length);
@@ -947,79 +1029,6 @@ function promptRename(path) {
     renderFiles();
     if (currentFile === r.name) openFile(r.name);
 }
-
-function openFileContextMenu(x, y, path) {
-    showCtxMenu(x, y, [
-        { label: 'Rename', action: () => promptRename(path) },
-        { label: 'Delete', danger: true, action: () => {
-            if (confirm(`Delete file "${path}"?`)) deleteFile(path);
-        } }
-    ]);
-}
-
-function openFolderContextMenu(x, y, folderPath) {
-    showCtxMenu(x, y, [
-        { label: 'New file here', action: () => {
-            const name = generateUntitledName(folderPath);
-            const r = createFile(name, '');
-            if (r.ok) { expandedFolders.add(folderPath); openFile(r.name); }
-        } },
-        { label: 'Delete folder', danger: true, action: () => {
-            const prefix = folderPath + '/';
-            const inside = Object.keys(files).filter(p => p === folderPath || p.startsWith(prefix));
-            if (!inside.length) return;
-            if (!confirm(`Delete folder "${folderPath}" and its ${inside.length} file(s)?`)) return;
-            inside.forEach(p => deleteFile(p));
-        } }
-    ]);
-}
-
-// Editor (textarea) context menu: standard clipboard ops, scoped to the
-// current selection. We can't read the OS clipboard without a permission
-// prompt in most browsers, so Paste uses the synchronous clipboard API
-// where available and falls back to the browser's native paste otherwise.
-function openEditorContextMenu(x, y) {
-    showCtxMenu(x, y, [
-        { label: 'Cut', action: () => execEditorClipboard('cut') },
-        { label: 'Copy', action: () => execEditorClipboard('copy') },
-        { label: 'Paste', action: () => execEditorClipboard('paste') },
-        null,
-        { label: 'Select all', action: () => { codeEditor.focus(); codeEditor.select(); } }
-    ]);
-}
-
-async function execEditorClipboard(kind) {
-    codeEditor.focus();
-    if (kind === 'paste') {
-        try {
-            const text = await navigator.clipboard.readText();
-            const start = codeEditor.selectionStart, end = codeEditor.selectionEnd;
-            const val = codeEditor.value;
-            codeEditor.value = val.slice(0, start) + text + val.slice(end);
-            codeEditor.selectionStart = codeEditor.selectionEnd = start + text.length;
-            codeEditor.dispatchEvent(new Event('input'));
-        } catch (e) {
-            document.execCommand('paste');
-        }
-        return;
-    }
-    const start = codeEditor.selectionStart, end = codeEditor.selectionEnd;
-    if (start === end) return;
-    const selected = codeEditor.value.slice(start, end);
-    try { await navigator.clipboard.writeText(selected); } catch (e) { document.execCommand('copy'); }
-    if (kind === 'cut') {
-        const val = codeEditor.value;
-        codeEditor.value = val.slice(0, start) + val.slice(end);
-        codeEditor.selectionStart = codeEditor.selectionEnd = start;
-        codeEditor.dispatchEvent(new Event('input'));
-    }
-}
-
-codeEditor.addEventListener('contextmenu', e => {
-    if (codeEditor.disabled) return;
-    e.preventDefault();
-    openEditorContextMenu(e.clientX, e.clientY);
-});
 
 function startCooldown() {
     isCooldown = true;
@@ -1094,34 +1103,9 @@ function executeActions(actionList) {
 }
 
 // ---------- model call ----------
-// Files at or under this size get their full content pushed into the
-// system prompt automatically, so the model can read AND edit in the very
-// first response -- no separate readfile round-trip, no doubled API calls/
-// token usage (and no extra trip to slam into a rate limit like 429).
-const INLINE_CONTENT_LINE_LIMIT = 180;
-
 function buildSystemPrompt() {
     const names = Object.keys(files);
     const fileListStr = names.map(name => `${name} (${files[name].split('\n').length} lines)`).join(', ') || 'none';
-
-    // Merge: anything already read into cache (and still current) OR small
-    // enough to inline by default, so the model has real content up front
-    // instead of needing a readfile action just to see it.
-    const inlineNames = names.filter(name => {
-        const cached = readCache[name];
-        if (cached && cached.raw === files[name]) return true;
-        return files[name].split('\n').length <= INLINE_CONTENT_LINE_LIMIT;
-    });
-
-    const contentBlock = inlineNames.length
-        ? '\n\nFILE CONTENTS (current -- use this directly, do NOT call readfile on these):\n' +
-          inlineNames.map(name => {
-              const numbered = (readCache[name] && readCache[name].raw === files[name])
-                  ? readCache[name].numbered
-                  : files[name].split('\n').map((l, i) => `${i + 1}: ${l}`).join('\n');
-              return `--- ${name} ---\n${numbered}`;
-          }).join('\n\n')
-        : '';
 
     return `You are Levino Flash, an AI coding assistant inside a code editor.
 
@@ -1137,14 +1121,13 @@ Actions you can use:
 {"type": "readfile", "filename": "name.ext", "start_line": N, "end_line": N}
 
 Files: ${fileListStr}
-Open file: ${currentFile || 'none'}${contentBlock}
+Open file: ${currentFile || 'none'}
 
 Rules:
 - "filename" is the full path including folders, e.g. "src/utils/helpers.lua" -- use exact paths from the list above, no quotes or markdown around them.
-- If a file's content is already shown above under FILE CONTENTS, you already have everything you need -- act on it directly in this same response (e.g. editlines/deletelines/writefile). Do NOT call readfile on it.
-- Only use readfile for large files whose content is NOT shown above. When you do, put readfile AND your edit action(s) in the SAME actions array, in that order -- never split reading and editing into two separate replies.
+- You do NOT have file contents yet. If the user wants you to view, explain, or edit an existing file, you MUST first call readfile for that file and STOP there -- only the readfile action, nothing else, in this response. Do not guess at editlines/deletelines/writefile content before you have actually read the file.
 - readfile: omit start_line/end_line to read the whole file. Don't guess a small range hoping to find something -- if unsure, read the whole file.
-- If the user only asks to view/show/explain a file, it's fine to respond with no actions (the content is likely already visible above) or a single readfile if it's a large file not shown.
+- Only after a previous turn already read a file (its content was shown to you in that turn's result) should you act on it with editlines/deletelines/writefile -- and that must happen in a separate, later response, never combined with the readfile action in the same response.
 - editlines/deletelines need line numbers within the file's actual line count -- never guess past it.
 - Prefer editlines/deletelines for targeted changes; use writefile only for short files or full rewrites the user explicitly asked for.
 - Don't invent filenames that don't exist unless creating a new file.
@@ -1152,15 +1135,17 @@ Rules:
 - "reply" is always in the user's language, short and natural.`;
 }
 
-async function callModel(userMessage) {
+// ---- OpenAI-compatible chat/completions (Cerebras and Groq both use this
+// exact request/response shape, just different URL, key, and model id) ----
+async function callOpenAICompatible(userMessage, apiUrl, apiKey, apiModel) {
     const history = chatHistory.slice(-MAX_HISTORY_MESSAGES).map(m => ({
         role: m.role === 'user' ? 'user' : 'assistant', content: m.content
     }));
-    const response = await fetch(API_URL, {
+    const response = await fetch(apiUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_KEY}` },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
         body: JSON.stringify({
-            model: MODEL, max_completion_tokens: 2048, temperature: 0.3, top_p: 1,
+            model: apiModel, max_completion_tokens: 2048, temperature: 0.3, top_p: 1,
             stream: false, response_format: { type: 'json_object' },
             messages: [{ role: 'system', content: buildSystemPrompt() }, ...history, { role: 'user', content: userMessage }]
         })
@@ -1173,6 +1158,72 @@ async function callModel(userMessage) {
     const text = data.choices?.[0]?.message?.content;
     if (!text) throw new Error('Empty response from model');
     return text;
+}
+
+function callCerebras(userMessage) {
+    return callOpenAICompatible(userMessage, CEREBRAS_API_URL, CEREBRAS_API_KEY, MODEL);
+}
+
+function callGroq(userMessage) {
+    const info = MODEL_INFO[MODEL];
+    const apiModel = info?.apiModel || MODEL;
+    return callOpenAICompatible(userMessage, GROQ_API_URL, GROQ_API_KEY, apiModel);
+}
+
+// ---- Gemini (Interactions API) ----
+// The Interactions API takes the whole exchange as a flat "input" string
+// (no native multi-turn message array like the old generateContent
+// endpoint), so prior turns are folded into one combined input block.
+async function callGemini(userMessage) {
+    if (!GEMINI_API_KEY) {
+        throw new Error('No Gemini API key set. Open the file and fill in GEMINI_API_KEY near the top of the <script> tag.');
+    }
+    const info = MODEL_INFO[MODEL];
+    const apiModel = info?.apiModel || MODEL;
+
+    const history = chatHistory.slice(-MAX_HISTORY_MESSAGES).map(m =>
+        `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`
+    ).join('\n\n');
+
+    const combinedInput = history
+        ? `${history}\n\nUser: ${userMessage}`
+        : userMessage;
+
+    const response = await fetch(GEMINI_INTERACTIONS_URL, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': GEMINI_API_KEY,
+            'Api-Revision': '2026-05-20'
+        },
+        body: JSON.stringify({
+            model: apiModel,
+            instructions: buildSystemPrompt(),
+            input: combinedInput
+        })
+    });
+    if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`API error ${response.status}: ${errText.slice(0, 300)}`);
+    }
+    const data = await response.json();
+    // Interactions API returns output as a list of steps; pull the text out
+    // of whichever step(s) carry it.
+    const steps = data.output || data.steps || [];
+    const text = steps
+        .flatMap(step => Array.isArray(step.content) ? step.content : [step])
+        .map(part => part.text || '')
+        .filter(Boolean)
+        .join('');
+    if (!text) throw new Error('Empty response from model');
+    return text;
+}
+
+async function callModel(userMessage) {
+    const info = MODEL_INFO[MODEL];
+    if (info?.provider === 'gemini') return callGemini(userMessage);
+    if (info?.provider === 'groq') return callGroq(userMessage);
+    return callCerebras(userMessage);
 }
 
 function parseModelJson(text) {
@@ -1191,33 +1242,11 @@ function friendlyFetchError(error) {
         ? 'The browser is blocking this request because the page was opened as a file (file://). ' +
           'Serve it through a local server instead, e.g. run "python3 -m http.server 8000" in the ' +
           'folder with this file, then open http://localhost:8000/ instead of double-clicking the file.'
-        : 'Could not reach api.cerebras.ai. Check your internet connection, disable any ad blockers/VPN ' +
+        : 'Could not reach the API. Check your internet connection, disable any ad blockers/VPN ' +
           'for this page, and try again.';
 }
 
 const MAX_AUTO_RETRIES = 2; // safety cap so a persistently wrong model can't loop forever
-
-// If the user's message names an existing file (by basename or full path)
-// and that file isn't already in readCache, pre-load it there before the
-// first API call. This means the model gets the file's content straight in
-// the system prompt and can act on it in a single response, instead of a
-// "readfile" round-trip followed by a second API call for the actual edit
-// -- which matters because every extra call burns rate-limit/token budget.
-function preloadMentionedFile(message) {
-    const names = Object.keys(files);
-    if (!names.length) return;
-    let best = null;
-    for (const path of names) {
-        const base = path.split('/').pop();
-        if (readCache[path] && files[path] === readCache[path].raw) continue; // already known
-        if (message.includes(path) || message.includes(base)) {
-            // Prefer the longest match (more specific filename wins over a
-            // short substring match of another file).
-            if (!best || base.length > best.base.length) best = { path, base };
-        }
-    }
-    if (best) readFile(best.path); // populates readCache as a side effect
-}
 
 async function sendToAI(userMessage) {
     const trimmed = userMessage.trim();
@@ -1230,7 +1259,6 @@ async function sendToAI(userMessage) {
     chatSendBtn.textContent = '...';
 
     try {
-        preloadMentionedFile(trimmed);
         await runTurn(trimmed, 0);
     } catch (error) {
         console.error(error);
@@ -1243,14 +1271,14 @@ async function sendToAI(userMessage) {
     chatInput.focus();
 }
 
-// Runs one model exchange and, if a line-range action failed because the
-// model guessed a line number outside the file, automatically retries with
-// the real line count -- so a bad guess self-corrects instead of leaving
-// the user with a dead-end error message.
+// Runs one model exchange. Each user request maps to exactly one model
+// call and one set of actions -- no automatic chaining of read followed by
+// an edit in the background. If the model only reads a file, that's where
+// the turn ends; the user (or a follow-up message) drives the next step.
+// The only automatic retry left is for line-range mistakes, since that's
+// purely a self-correction of an invalid number, not an extra unrequested
+// action.
 async function runTurn(message, depth, originalRequest) {
-    // originalRequest is the user's actual ask, kept stable across an
-    // auto-continued chain (read -> edit) so the follow-up prompt still
-    // carries the real intent instead of a generic "continue" message.
     const userAsk = originalRequest || message;
     const rawText = await callModel(message);
     const parsed = parseModelJson(rawText);
@@ -1258,29 +1286,6 @@ async function runTurn(message, depth, originalRequest) {
     addChatMessage('ai', parsed.reply, results);
 
     if (!results) return;
-
-    // If this turn was read-only, decide whether the model still owes the
-    // user an edit. A readfile is "final" only when the user's original
-    // message was itself just a request to view/explain something; any
-    // other request (fix/change/delete/add/etc.) means the read was meant
-    // to be a stepping stone, and the model failing to also act on it in
-    // the same turn is the model dropping the ball -- so we continue the
-    // turn automatically with the file content now available, instead of
-    // leaving the user with a dead-end "I'll read it" message.
-    const readOnly = results.every(r => r.type === 'readfile');
-    if (readOnly) {
-        // File content is now injected straight into the system prompt via
-        // readCache on the next call, so we don't need to dump it into chat
-        // history by hand -- that just duplicated context and made the
-        // model more likely to "re-read" things it already had.
-        const editIntentPattern = /(удали|убери|измени|исправь|поменяй|добавь|перепиши|сделай|замени|почини|fix|change|edit|delete|remove|replace|update|add|rewrite|modify)/i;
-        const looksViewOnly = !editIntentPattern.test(userAsk);
-
-        if (!looksViewOnly && depth < MAX_AUTO_RETRIES) {
-            await runTurn(`Продолжи и выполни исходную просьбу: "${userAsk}". Содержимое файла уже доступно тебе выше -- не вызывай readfile снова, сразу добавь editlines/deletelines/writefile.`, depth + 1, userAsk);
-        }
-        return;
-    }
 
     const rangeErrors = results.filter(r => !r.ok && /out of range/i.test(r.error || ''));
     if (rangeErrors.length && depth < MAX_AUTO_RETRIES) {
@@ -1298,6 +1303,29 @@ chatInput.addEventListener('keydown', e => {
 clearChatBtn.addEventListener('click', () => { if (confirm('Clear chat history?')) clearChat(); });
 
 // ---------- init ----------
+MODEL = storage.load('levino_model', 'gpt-oss-120b');
+if (!MODEL_INFO[MODEL]) MODEL = 'gpt-oss-120b';
+function setModel(id) {
+    MODEL = id;
+    storage.save('levino_model', MODEL);
+    modelPickerLabel.textContent = MODEL_INFO[id]?.label || id;
+    modelPickerMenu.querySelectorAll('.model-picker-item').forEach(el => {
+        el.classList.toggle('selected', el.dataset.model === id);
+    });
+}
+setModel(MODEL);
+modelPickerBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    modelPicker.classList.toggle('open');
+});
+modelPickerMenu.querySelectorAll('.model-picker-item').forEach(el => {
+    el.addEventListener('click', () => {
+        setModel(el.dataset.model);
+        modelPicker.classList.remove('open');
+    });
+});
+document.addEventListener('click', () => modelPicker.classList.remove('open'));
+
 files = storage.load('levino_files', null) || { 'main.py': 'print("Hello, World!")' };
 saveFiles();
 chatHistory = storage.load('levino_chat', []);
